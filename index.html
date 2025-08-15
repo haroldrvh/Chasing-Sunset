@@ -151,7 +151,7 @@ ctx.restore(); }
     let idx=0; for(const o of bankOut) leaf(axisOut,o,idx++); for(const o of bankIn) leaf(axisIn,o,idx++); ctx.restore(); }
 
   // ---- update
-  function update(dt){ state.time+=dt; updateSmoke(dt); updatePoofs(dt);
+  function update(dt){ state.time+=dt; if(state.time<state.stopUntil){ if(nextSpawn<state.stopUntil) nextSpawn=state.stopUntil; if(nextHeal<state.stopUntil) nextHeal=state.stopUntil; } updateSmoke(dt); updatePoofs(dt);
     // health drains at a constant rate: full -> empty in 10s
     state.health=clamp((state.health??1)-dt/10,0,1); if(state.health<=0 && !state.gameOver){ state.deathReason='health'; addHighScore(state.distance); state.gameOver=true; state.restartAt = state.time+4.0; state.stopUntil=0; }
     if(!state.gameOver && state.time>=nextHeal) spawnHealth(); if(!state.gameOver && state.time>=nextSpawn) spawnObstacle(); const moving=(state.gameOver||state.time<state.stopUntil)?0:state.normalSpeed*SPEED_SCALE; palms.forEach(p=>{ p.y+=moving*dt*0.8; if(p.y>H+64) p.y=-Math.random()*H; }); obstacles.forEach(o=>{ if(o.flying){ o.vy=(o.vy??0)+(o.gravity??220)*dt; o.fx+=(o.vx??0)*dt; o.fy+=(o.vy??0)*dt; if(o.rvel) o.rot=(o.rot||0)+o.rvel*dt; if(o.fs) o.fs*=0.995; } else { const t=clamp((o.y-horizonY)/(H-horizonY),0,1); const early=t<0.5?(0.4+1.2*t):1.0; o.y+=moving*dt*obstacleSpeedFactor*early; } }); healths.forEach(h=>{ const t=clamp((h.y-horizonY)/(H-horizonY),0,1); const early=t<0.5?(0.4+1.2*t):1.0; h.y+=moving*dt*obstacleSpeedFactor*early; });
