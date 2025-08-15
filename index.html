@@ -15,7 +15,7 @@
 <div id="wrap">
   <canvas id="game" width="480" height="270" aria-label="Chasing Sunset core game"></canvas>
 </div>
-<div id="startOverlay"><button id="startBtn">Start</button><div id="startTip">Avoid the cats, stay lean.</div><div id="startTip2">Move with A/D</div></div>
+<div id="startOverlay"><button id="startBtn">Start</button><div id="startTip">Avoid the cats, stay lean.</div><div id="startTip2">Move with A/D, press SPACE to pause.</div></div>
 
 <script>
 (()=>{
@@ -29,7 +29,7 @@
   const SPEED_SCALE=0.5;
 
   // ---- state
-  const state={ time:0, normalSpeed:120, stopUntil:0, distance:0, hits:0, lives:4, gameOver:false, restartAt:0, highScores:[], started:false, deathReason:null };
+  const state={ time:0, normalSpeed:120, stopUntil:0, distance:0, hits:0, lives:4, gameOver:false, restartAt:0, highScores:[], started:false, paused:false, deathReason:null };
   const obstacleSpeedFactor=0.88;
 
   // ---- health system (minimal vars)
@@ -76,7 +76,19 @@
 
   // ---- input
   const playerY=H*0.78; const player={ lane:1, width:74, height:108, x(){ return laneXAtY(this.lane,playerY);} };
-  window.addEventListener('keydown',e=>{ if(e.key==='ArrowLeft'||e.key==='a'||e.key==='A') player.lane=Math.max(0,player.lane-1); else if(e.key==='ArrowRight'||e.key==='d'||e.key==='D') player.lane=Math.min(LANES-1,player.lane+1); });
+  window.addEventListener('keydown', e => {
+    // Toggle pause with Space during gameplay
+    if (e.code==='Space' || e.key===' ') {
+      if (state.started && !state.gameOver) {
+        state.paused = !state.paused;
+        e.preventDefault();
+      }
+      return;
+    }
+    if (state.paused) return;
+    if (e.key==='ArrowLeft'||e.key==='a'||e.key==='A') player.lane=Math.max(0,player.lane-1);
+    else if (e.key==='ArrowRight'||e.key==='d'||e.key==='D') player.lane=Math.min(LANES-1,player.lane+1);
+  });
   window.addEventListener('touchstart',e=>{ const x=e.touches[0].clientX; if(x<window.innerWidth/2) player.lane=Math.max(0,player.lane-1); else player.lane=Math.min(LANES-1,player.lane+1); });
 
   // ---- spawn
@@ -126,7 +138,7 @@
   const hitZone=28;
   return Math.abs(o.y-playerY)<hitZone;
 }
-  function resetGame(){ state.distance=0; state.hits=0; state.lives=4; state.gameOver=false; state.stopUntil=0; obstacles.length=0; nextSpawn=state.time+1.2; state.health=1; healths.length=0; nextHeal=state.time+2.0; state.deathReason=null; }
+  function resetGame(){ state.distance=0; state.hits=0; state.lives=4; state.gameOver=false; state.stopUntil=0; obstacles.length=0; nextSpawn=state.time+1.2; state.health=1; healths.length=0; nextHeal=state.time+2.0; htrail.length=0; state.deathReason=null; }
   function addHighScore(d){ const v=Math.max(0,Math.floor(d)); state.highScores.push(v); state.highScores.sort((a,b)=>b-a); if(state.highScores.length>3) state.highScores.length=3; }
 
   // ---- HUDs
@@ -150,11 +162,27 @@ ctx.restore(); }
   function drawPalm(y,side){ if(y<horizonY-6||y>H+60) return; const e=roadEdgesAtY(y); const baseX=side<0?e.left-14:e.right+14; const t=clamp((y-horizonY)/(H-horizonY),0,1); const s=clamp(lerp(0.22,1.45,t),0.22,1.45); const trunkH=46*s, trunkW=6; const topX=baseX+(side<0?-6*s:6*s), topY=y-trunkH; ctx.fillStyle='#7a4a1a'; ctx.beginPath(); ctx.moveTo(baseX-trunkW/2,y); ctx.lineTo(baseX+trunkW/2,y); ctx.lineTo(topX+trunkW*0.35,topY); ctx.lineTo(topX-trunkW*0.35,topY); ctx.closePath(); ctx.fill(); const crownX=topX, crownY=topY; ctx.save(); ctx.lineCap='round'; ctx.lineJoin='round'; ctx.strokeStyle='#39ff14'; ctx.lineWidth=Math.max(1.6,2.0*s); const axisOut=(side<0?Math.PI:0)+(side<0?-0.12:0.12), axisIn=axisOut+Math.PI; const bankOut=[-0.80,-0.42,0.36], bankIn=[-0.70,-0.18,0.58]; const len0=30*s; function leaf(axis,off,idx){ const a=axis+off, L=len0*(0.92+0.15*Math.sin(idx*1.7)), spread=0.18*(1-Math.min(1,Math.abs(off)/1.1)), droop=(0.12+0.22*Math.max(0,off))*L; const tipX=crownX+Math.cos(a)*L, tipY=crownY+Math.sin(a)*L+droop; for(const k of [-1,1]){ const ae=a+k*spread, perp=ae+Math.PI/2; const c1x=crownX+Math.cos(ae)*L*0.45+Math.cos(perp)*L*0.12, c1y=crownY+Math.sin(ae)*L*0.45+Math.sin(perp)*L*0.12; const c2x=crownX+Math.cos(ae)*L*0.82-Math.cos(perp)*L*0.15, c2y=crownY+Math.sin(ae)*L*0.82-Math.sin(perp)*L*0.08+droop*0.6; ctx.beginPath(); ctx.moveTo(crownX,crownY); ctx.bezierCurveTo(c1x,c1y,c2x,c2y,tipX,tipY); ctx.stroke(); } }
     let idx=0; for(const o of bankOut) leaf(axisOut,o,idx++); for(const o of bankIn) leaf(axisIn,o,idx++); ctx.restore(); }
 
+  // ---- health trail smoke
+  const htrail=[];
+  function spawnHealthTrailFrom(h){
+    const y=h.y; const xCenter=laneXAtY(h.lane,y);
+    const t=clamp((y-horizonY)/(H-horizonY),0,1);
+    const s=clamp(lerp(0.25,1.1,t),0.25,1.1);
+    const mx=h.mirror?-1:1;
+    const L=24*1.2, half=L/2; // match health draw length
+    const tipX=xCenter + s*mx*half, tipY=y;
+    htrail.push({x:tipX,y:tipY,vx:(Math.random()-0.5)*20,vy:-(20+Math.random()*30),r:2+Math.random()*2,life:0,max:0.5+Math.random()*0.3});
+  }
+  function updateHealthTrail(dt){
+    for(let i=htrail.length-1;i>=0;i--){ const p=htrail[i]; p.life+=dt; p.x+=p.vx*dt; p.y+=p.vy*dt; p.vx*=0.98; p.vy*=0.98; if(p.life>p.max) htrail.splice(i,1); }
+  }
+  function drawHealthTrail(){ if(!htrail.length) return; ctx.save(); ctx.globalCompositeOperation='lighter'; for(const p of htrail){ const t=p.life/p.max; const a=(1-t)*0.35; const rad=p.r*(1+t*1.2); const g=ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,rad); g.addColorStop(0,`rgba(255,0,34,${a})`); g.addColorStop(1,'rgba(255,0,34,0)'); ctx.fillStyle=g; ctx.beginPath(); ctx.arc(p.x,p.y,rad,0,Math.PI*2); ctx.fill(); } ctx.restore(); }
+
   // ---- update
-  function update(dt){ state.time+=dt; if(state.time<state.stopUntil){ if(nextSpawn<state.stopUntil) nextSpawn=state.stopUntil; if(nextHeal<state.stopUntil) nextHeal=state.stopUntil; } updateSmoke(dt); updatePoofs(dt);
+  function update(dt){ state.time+=dt; if(state.time<state.stopUntil){ if(nextSpawn<state.stopUntil) nextSpawn=state.stopUntil; if(nextHeal<state.stopUntil) nextHeal=state.stopUntil; } updateSmoke(dt); updatePoofs(dt); updateHealthTrail(dt);
     // health drains at a constant rate: full -> empty in 10s
     state.health=clamp((state.health??1)-dt/10,0,1); if(state.health<=0 && !state.gameOver){ state.deathReason='health'; addHighScore(state.distance); state.gameOver=true; state.restartAt = state.time+4.0; state.stopUntil=0; }
-    if(!state.gameOver && state.time>=nextHeal) spawnHealth(); if(!state.gameOver && state.time>=nextSpawn) spawnObstacle(); const moving=(state.gameOver||state.time<state.stopUntil)?0:state.normalSpeed*SPEED_SCALE; palms.forEach(p=>{ p.y+=moving*dt*0.8; if(p.y>H+64) p.y=-Math.random()*H; }); obstacles.forEach(o=>{ if(o.flying){ o.vy=(o.vy??0)+(o.gravity??220)*dt; o.fx+=(o.vx??0)*dt; o.fy+=(o.vy??0)*dt; if(o.rvel) o.rot=(o.rot||0)+o.rvel*dt; if(o.fs) o.fs*=0.995; } else { const t=clamp((o.y-horizonY)/(H-horizonY),0,1); const early=t<0.5?(0.4+1.2*t):1.0; o.y+=moving*dt*obstacleSpeedFactor*early; } }); healths.forEach(h=>{ const t=clamp((h.y-horizonY)/(H-horizonY),0,1); const early=t<0.5?(0.4+1.2*t):1.0; h.y+=moving*dt*obstacleSpeedFactor*early; });
+    if(!state.gameOver && state.time>=nextHeal) spawnHealth(); if(!state.gameOver && state.time>=nextSpawn) spawnObstacle(); const moving=(state.gameOver||state.time<state.stopUntil)?0:state.normalSpeed*SPEED_SCALE; palms.forEach(p=>{ p.y+=moving*dt*0.8; if(p.y>H+64) p.y=-Math.random()*H; }); obstacles.forEach(o=>{ if(o.flying){ o.vy=(o.vy??0)+(o.gravity??220)*dt; o.fx+=(o.vx??0)*dt; o.fy+=(o.vy??0)*dt; if(o.rvel) o.rot=(o.rot||0)+o.rvel*dt; if(o.fs) o.fs*=0.995; } else { const t=clamp((o.y-horizonY)/(H-horizonY),0,1); const early=t<0.5?(0.4+1.2*t):1.0; o.y+=moving*dt*obstacleSpeedFactor*early; } }); healths.forEach(h=>{ const t=clamp((h.y-horizonY)/(H-horizonY),0,1); const early=t<0.5?(0.4+1.2*t):1.0; h.y+=moving*dt*obstacleSpeedFactor*early; h.smokeAcc=(h.smokeAcc||0)+dt*18; while(h.smokeAcc>=1){ spawnHealthTrailFrom(h); h.smokeAcc-=1; } });
     // collect health pickups
     for(let i=healths.length-1;i>=0;i--){ const h=healths[i]; if(collide(h)){ state.health=clamp(state.health+HEALTH_REPLENISH,0,1); healths.splice(i,1);} }
     state.distance+=moving*dt/10; if(moving>0){ for(const o of obstacles){ if(!o.passed && collide(o)){ o.passed=true; state.hits++; if(state.lives>0) state.lives--; if(state.lives<=0 && !state.gameOver){ const yHit=o.y, xHit=laneXAtY(o.lane,yHit); const tScale=clamp((yHit-horizonY)/(H-horizonY),0,1); const sScale=clamp(lerp(0.25,1.1,tScale),0.25,1.1); o.flying=true; o.fx=xHit; o.fy=yHit; o.fs=sScale; o.rot=0; o.vx=(Math.random()<0.5?-1:1)*(160+Math.random()*140); o.vy=-(140+Math.random()*180); o.rvel=(Math.random()*2-1)*6; o.gravity=300; spawnPoof(xHit,yHit,sScale); state.deathReason='life'; addHighScore(state.distance); state.gameOver=true; state.restartAt = state.time+4.0; state.stopUntil=0; } else { const yHit=o.y, xHit=laneXAtY(o.lane,yHit); const tScale=clamp((yHit-horizonY)/(H-horizonY),0,1); const sScale=clamp(lerp(0.25,1.1,tScale),0.25,1.1); o.flying=true; o.fx=xHit; o.fy=yHit; o.fs=sScale; o.rot=0; o.vx=(Math.random()<0.5?-1:1)*(140+Math.random()*120); o.vy=-(120+Math.random()*160); o.rvel=(Math.random()*2-1)*6; o.gravity=300; spawnPoof(xHit,yHit,sScale); state.stopUntil=state.time+2.0; } break; } } }
@@ -172,10 +200,31 @@ ctx.restore(); }
     drawPlayer();
     obstacles.forEach(drawObstacle);
     healths.forEach(drawHealthItem);
-    drawPoofs();
+    drawPoofs(); drawHealthTrail();
     drawCanvasHUD();
     // mirrored scores HUD
     ctx.save(); drawHighScoresHUD(); ctx.restore();
+
+    // PAUSE overlay (VHS-style)
+    if(state.paused){
+      ctx.save();
+      const msg='PAUSE';
+      let fs=Math.floor(H/3.2);
+      ctx.textAlign='center';
+      ctx.textBaseline='middle';
+      ctx.font='900 '+fs+'px monospace';
+      let m=ctx.measureText(msg);
+      if(m.width>W*0.9){ fs=Math.floor(fs*(W*0.9/m.width)); ctx.font='900 '+fs+'px monospace'; }
+      // chroma offsets for VHS look
+      ctx.globalAlpha=0.85; ctx.fillStyle='#00ffff'; ctx.fillText(msg,cx-1,H*0.5);
+      ctx.fillStyle='#ff00ff'; ctx.fillText(msg,cx+1,H*0.5); ctx.globalAlpha=1;
+      // main white with black stroke on top
+      ctx.lineWidth=Math.max(3,Math.floor(fs*0.06));
+      ctx.strokeStyle='#000'; ctx.strokeText(msg,cx,H*0.5);
+      ctx.fillStyle='#ffffff'; ctx.fillText(msg,cx,H*0.5);
+      ctx.restore();
+      return;
+    }
     if(state.gameOver){ ctx.save(); const msg='GAME OVER'; let fs=Math.floor(H/3); ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.font='900 '+fs+'px monospace'; let m=ctx.measureText(msg); if(m.width>W*0.92){ fs=Math.floor(fs*(W*0.92/m.width)); ctx.font='900 '+fs+'px monospace'; } const blink=(Math.sin(state.time*5)>0)?1.0:0.75; ctx.globalAlpha=blink; ctx.shadowColor='#ff0022'; ctx.shadowBlur=Math.max(12,Math.floor(fs*0.2)); const grad=ctx.createLinearGradient(0,(H/2)-fs*0.6,0,(H/2)+fs*0.6); grad.addColorStop(0,'#ffd1d6'); grad.addColorStop(0.35,'#ff3350'); grad.addColorStop(1,'#a40014'); ctx.fillStyle=grad; ctx.fillText(msg,cx,H*0.5); ctx.shadowBlur=0; ctx.lineWidth=Math.max(3,Math.floor(fs*0.065)); ctx.strokeStyle='#51000c'; ctx.strokeText(msg,cx,H*0.5);
       // game-over subtext based on death reason
       ctx.font='bold '+Math.max(12,Math.floor(fs*0.18))+'px monospace';
@@ -191,7 +240,7 @@ ctx.restore(); }
   }
 
   // ---- palms array init already done; main loop
-  let last=0; function loop(t){ const now=t/1000, dt=Math.min(0.033,(last?now-last:0)); last=now; if(!state.started){ ctx.clearRect(0,0,W,H); if(bg){ ctx.drawImage(bg,0,0); drawTitleAndSmoke(SUN_Y,SUN_R); } else { const g=ctx.createLinearGradient(0,0,0,H); g.addColorStop(0,'#2a0036'); g.addColorStop(1,'#1b0033'); ctx.fillStyle=g; ctx.fillRect(0,0,W,H); drawTitleAndSmoke(SUN_Y,SUN_R); } requestAnimationFrame(loop); return; } update(dt); ctx.clearRect(0,0,W,H); draw(); requestAnimationFrame(loop); } requestAnimationFrame(loop);
+  let last=0; function loop(t){ const now=t/1000, dt=Math.min(0.033,(last?now-last:0)); last=now; if(!state.started){ ctx.clearRect(0,0,W,H); if(bg){ ctx.drawImage(bg,0,0); drawTitleAndSmoke(SUN_Y,SUN_R); } else { const g=ctx.createLinearGradient(0,0,0,H); g.addColorStop(0,'#2a0036'); g.addColorStop(1,'#1b0033'); ctx.fillStyle=g; ctx.fillRect(0,0,W,H); drawTitleAndSmoke(SUN_Y,SUN_R); } requestAnimationFrame(loop); return; } if(!state.paused) update(dt); ctx.clearRect(0,0,W,H); draw(); requestAnimationFrame(loop); } requestAnimationFrame(loop);
 
   // ---- fit + build bg
   function fit(){ const ww=window.innerWidth, wh=window.innerHeight; const s=Math.min(ww/W, wh/H); canvas.style.width=Math.floor(W*s)+'px'; canvas.style.height=Math.floor(H*s)+'px'; buildBG(); }
@@ -213,25 +262,45 @@ ctx.restore(); }
   function drawHealthItem(h){
     const y=h.y, x=laneXAtY(h.lane,y);
     ctx.save(); ctx.translate(x,y);
-    const t=clamp((y-horizonY)/(H-horizonY),0,1);
+    const t=clamp((h.y-horizonY)/(H-horizonY),0,1);
     const s=clamp(lerp(0.25,1.1,t),0.25,1.1);
     const mx=h.mirror?-1:1; ctx.scale(s*mx,s);
 
-    // 20% longer stick
+    // 20% longer stick, slightly conical (doubles width at the red end)
     const L = 24 * 1.2; // length
     const half = L / 2;
+    const tip = L * 0.15; // red end length
 
-    // base white stick
+    const tStart = 4;      // start thickness (white end)
+    const tEnd   = 8;      // end thickness (red end ~2x)
+    const hs0 = tStart/2, hs1 = tEnd/2;
+
+    // --- base white conical stick (trapezoid)
     ctx.fillStyle = '#fff';
-    ctx.fillRect(-half, -2, L, 4);
+    ctx.beginPath();
+    ctx.moveTo(-half, -hs0);
+    ctx.lineTo(-half,  hs0);
+    ctx.lineTo( half,  hs1);
+    ctx.lineTo( half, -hs1);
+    ctx.closePath();
+    ctx.fill();
 
-    // glowing red tip on the rightmost 15%
-    const tip = L * 0.15;
+    // --- glowing red tip (matching the cone thickness over last 15%)
+    const xTip = half - tip;
+    const progress = (xTip + half) / L;            // 0..1 along length
+    const hsTip = hs0 + (hs1 - hs0) * progress;    // half-thickness at xTip
+
     ctx.save();
     ctx.shadowColor = '#ff0022';
     ctx.shadowBlur = 10;
     ctx.fillStyle = '#ff0022';
-    ctx.fillRect(half - tip, -2, tip, 4);
+    ctx.beginPath();
+    ctx.moveTo(xTip, -hsTip);
+    ctx.lineTo(xTip,  hsTip);
+    ctx.lineTo( half,  hs1);
+    ctx.lineTo( half, -hs1);
+    ctx.closePath();
+    ctx.fill();
     ctx.restore();
 
     ctx.restore();
