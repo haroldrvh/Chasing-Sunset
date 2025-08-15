@@ -15,6 +15,7 @@
 <div id="wrap">
   <canvas id="game" width="480" height="270" aria-label="Chasing Sunset core game"></canvas>
 </div>
+<div id="startOverlay"><button id="startBtn">Start</button><div id="startTip">Avoid the cats, keep the lean.</div><div id="startTip2">Move with A/D</div></div>
 
 <script>
 (()=>{
@@ -28,8 +29,16 @@
   const SPEED_SCALE=0.5;
 
   // ---- state
-  const state={ time:0, normalSpeed:120, stopUntil:0, distance:0, hits:0, lives:4, gameOver:false, restartAt:0, highScores:[] };
+  const state={ time:0, normalSpeed:120, stopUntil:0, distance:0, hits:0, lives:4, gameOver:false, restartAt:0, highScores:[], started:false };
   const obstacleSpeedFactor=0.88;
+
+  // ---- health system (minimal vars)
+  state.health=1;                      // 0..1
+  const healths=[];                    // health pickups on road
+  let nextHeal=2.0;                    // first spawn ~2s
+  const lastCatSpawn=new Array(LANES).fill(-99);
+  let lastCatLane=-1;
+  const HEALTH_REPLENISH=0.5;          // +50% bar per pickup
 
   // ---- title smoke
   const titleText='Chasing Sunset'; let titleBox=null; const smoke=[]; let smokeAcc=0; const smokeRate=26;
@@ -59,7 +68,7 @@
     const top=roadEdgesAtY(horizonY+1), bot=roadEdgesAtY(H); g.fillStyle='#0f001a'; g.beginPath(); g.moveTo(top.left,horizonY); g.lineTo(top.right,horizonY); g.lineTo(bot.right,H); g.lineTo(bot.left,H); g.closePath(); g.fill();
     g.save(); g.shadowColor='#ff2e93'; g.shadowBlur=8; g.strokeStyle='#ff2e93'; g.lineWidth=2; g.beginPath(); g.moveTo(top.left,horizonY); g.lineTo(bot.left,H); g.stroke(); g.beginPath(); g.moveTo(top.right,horizonY); g.lineTo(bot.right,H); g.stroke(); g.restore();
     g.strokeStyle='#ff2e93'; g.lineWidth=2; g.globalAlpha=0.9; for(let l=1;l<LANES;l++){ g.beginPath(); for(let y=horizonY;y<=H;y+=8){ const e=roadEdgesAtY(y); const xx=e.left+(e.width/LANES)*l; if(y===horizonY) g.moveTo(xx,y); else g.lineTo(xx,y);} g.stroke(); } g.globalAlpha=1;
-    g.strokeStyle='#00f5ff'; g.lineWidth=1; g.globalAlpha=0.42; for(let i=0;i<30;i++){ const t=i/30; const y=lerp(horizonY,H,t*t); const e=roadEdgesAtY(y); g.beginPath(); g.moveTo(e.left,y); g.lineTo(e.right,y); g.stroke(); } g.globalAlpha=1;
+    g.strokeStyle='#00f5ff'; g.lineWidth=1; g.globalAlpha=0.42; for(let i=0;i<30;i+=2){ const t=i/30; const y=lerp(horizonY,H,t*t); const e=roadEdgesAtY(y); g.beginPath(); g.moveTo(e.left,y); g.lineTo(e.right,y); g.stroke(); } g.globalAlpha=1;
   }
   function buildBG(){ bg=document.createElement('canvas'); bg.width=W; bg.height=H; bgctx=bg.getContext('2d'); drawStaticBG(bgctx); }
 
@@ -69,7 +78,7 @@
   window.addEventListener('touchstart',e=>{ const x=e.touches[0].clientX; if(x<window.innerWidth/2) player.lane=Math.max(0,player.lane-1); else player.lane=Math.min(LANES-1,player.lane+1); });
 
   // ---- spawn
-  const obstacles=[]; let nextSpawn=1.2; function spawnObstacle(){ const lane=(Math.random()*LANES)|0; obstacles.push({lane,y:horizonY+2,type:'cat',passed:false,flashT:0}); nextSpawn=state.time+(3000+Math.random()*1000)/1000; }
+  const obstacles=[]; let nextSpawn=1.2; function spawnObstacle(){ let lane=(Math.random()*LANES)|0; if(lane===lastCatLane) lane=(lane+1)%LANES; obstacles.push({lane,y:horizonY+2,type:'cat',passed:false,flashT:0,mirror:Math.random()<0.5,col:['#ffffff','#ffea70','#ff7a00'][(Math.random()*3)|0]}); lastCatLane=lane; lastCatSpawn[lane]=state.time; nextSpawn=state.time + (1000+Math.random()*1000)/1000; }
   const palms=[]; function spawnPalm(side){ palms.push({side,y:-Math.random()*H}); } for(let i=0;i<12;i++){ spawnPalm(-1); spawnPalm(1); }
 
   // ---- draw title & smoke over cached bg
@@ -96,27 +105,29 @@
     ctx.restore(); }
 
   // ---- cat sprite
-  function drawCatSprite(){ const w=28,h=18*1.3; const legW=Math.max(2,w*0.10), legH=h*0.26; function leg(x,y){ ctx.save(); ctx.shadowColor='#39ff14'; ctx.shadowBlur=6; ctx.fillStyle='#39ff14'; ctx.globalAlpha=0.95; ctx.fillRect(x-legW/2,y,legW,legH); ctx.beginPath(); ctx.ellipse(x,y+legH+2.2,Math.max(1.6,legW*0.9),2.2,0,0,Math.PI*2); ctx.fill(); ctx.shadowBlur=0; ctx.globalAlpha=1; ctx.strokeStyle='#39ff14'; ctx.lineWidth=2; ctx.strokeRect(x-legW/2,y,legW,legH); ctx.beginPath(); ctx.ellipse(x,y+legH+2.2,Math.max(1.6,legW*0.9),2.2,0,0,Math.PI*2); ctx.stroke(); ctx.restore(); }
-    leg(-w*0.22,h*0.12); leg(w*0.24,h*0.12); leg(-w*0.35,h*0.08); leg(w*0.06,h*0.08);
-    ctx.globalAlpha=0.28; ctx.fillStyle='#000'; ctx.beginPath(); ctx.ellipse(0,h*0.42,w*0.55,3.5,0,0,Math.PI*2); ctx.fill(); ctx.globalAlpha=1;
-    ctx.fillStyle='#0c0f1e'; ctx.beginPath(); ctx.ellipse(0,0,w*0.58,h*0.36,0,0,Math.PI*2); ctx.fill();
-    const hx=-w*0.52, hy=-h*0.10, hr=h*0.38; ctx.beginPath(); ctx.arc(hx,hy,hr,0,Math.PI*2); ctx.fill();
-    // ears tilted outward
-    ctx.fillStyle='#0c0f1e'; ctx.strokeStyle='#39ff14'; ctx.lineWidth=2; const baseY=hy-hr*0.85; const half=hr*0.36; const height=Math.sqrt(3)*half; const cxL=hx-hr*0.42, cxR=hx+hr*0.20; function ear(cx,sign){ const th=sign*0.22, ct=Math.cos(th), st=Math.sin(th); const p1={x:cx-half,y:baseY}, p2={x:cx+half,y:baseY}, p3={x:cx,y:baseY-height}; function rot(p){ const dx=p.x-cx, dy=p.y-baseY; return {x:cx+dx*ct-dy*st, y:baseY+dx*st+dy*ct}; } const r1=rot(p1), r2=rot(p2), r3=rot(p3); ctx.beginPath(); ctx.moveTo(r1.x,r1.y); ctx.lineTo(r2.x,r2.y); ctx.lineTo(r3.x,r3.y); ctx.closePath(); ctx.fill(); ctx.stroke(); } ear(cxL,-1); ear(cxR,1);
-    const wag=Math.sin(state.time*2)*h*0.04; ctx.strokeStyle='#39ff14'; ctx.lineWidth=2; ctx.globalAlpha=0.9; ctx.beginPath(); ctx.moveTo(w*0.55,-h*0.05); ctx.quadraticCurveTo(w*0.86,-h*0.38+wag,w*0.48,-h*0.56+wag); ctx.quadraticCurveTo(w*0.28,-h*0.70+wag,w*0.40,-h*0.24+wag*0.6); ctx.stroke(); ctx.globalAlpha=1;
-    const eyeOffset=hr*0.36, eyeY=hy+hr*0.02; for(const ex of [hx-eyeOffset, hx+eyeOffset*0.25]){ const g=ctx.createRadialGradient(ex,eyeY,0.1,ex,eyeY,3); g.addColorStop(0,'rgba(170,255,68,0.9)'); g.addColorStop(1,'rgba(170,255,68,0)'); ctx.fillStyle=g; ctx.beginPath(); ctx.arc(ex,eyeY,3,0,Math.PI*2); ctx.fill(); ctx.fillStyle='#caff59'; ctx.beginPath(); ctx.ellipse(ex,eyeY,2.2,1.5,0,0,Math.PI*2); ctx.fill(); }
-    ctx.strokeStyle='#b7dfff'; ctx.lineWidth=1; for(let i=-1;i<=1;i++){ const yy=hy+i*3; ctx.beginPath(); ctx.moveTo(hx-2,yy); ctx.lineTo(hx-20,yy-1); ctx.stroke(); ctx.beginPath(); ctx.moveTo(hx+2,yy); ctx.lineTo(hx+18,yy-1); ctx.stroke(); }
-    ctx.strokeStyle='#39ff14'; ctx.lineWidth=2; ctx.globalAlpha=0.9; ctx.beginPath(); ctx.ellipse(0,0,w*0.58,h*0.36,0,0,Math.PI*2); ctx.stroke(); ctx.beginPath(); ctx.arc(hx,hy,hr,0,Math.PI*2); ctx.stroke(); ctx.globalAlpha=1; }
+  function drawCatSprite(c='#39ff14'){ const w=28,h=18*1.3; const legW=Math.max(2,w*0.10), legH=h*0.26; function leg(x,y){ ctx.save(); ctx.shadowColor=c; ctx.shadowBlur=6; ctx.fillStyle=c; ctx.globalAlpha=0.95; ctx.fillRect(x-legW/2,y,legW,legH); ctx.beginPath(); ctx.ellipse(x,y+legH+2.2,Math.max(1.6,legW*0.9),2.2,0,0,Math.PI*2); ctx.fill(); ctx.shadowBlur=0; ctx.globalAlpha=1; ctx.strokeStyle=c; ctx.lineWidth=2; ctx.strokeRect(x-legW/2,y,legW,legH); ctx.beginPath(); ctx.ellipse(x,y+legH+2.2,Math.max(1.6,legW*0.9),2.2,0,0,Math.PI*2); ctx.stroke(); ctx.restore(); } leg(-w*0.22,h*0.12); leg(w*0.24,h*0.12); leg(-w*0.35,h*0.08); leg(w*0.06,h*0.08); ctx.globalAlpha=0.28; ctx.fillStyle='#000'; ctx.beginPath(); ctx.ellipse(0,h*0.42,w*0.55,3.5,0,0,Math.PI*2); ctx.fill(); ctx.globalAlpha=1; ctx.fillStyle='#0c0f1e'; ctx.beginPath(); ctx.ellipse(0,0,w*0.58,h*0.36,0,0,Math.PI*2); ctx.fill(); const hx=-w*0.52, hy=-h*0.10, hr=h*0.38; ctx.beginPath(); ctx.arc(hx,hy,hr,0,Math.PI*2); ctx.fill(); ctx.fillStyle='#0c0f1e'; ctx.strokeStyle=c; ctx.lineWidth=2; const baseY=hy-hr*0.85; const half=hr*0.36; const height=Math.sqrt(3)*half; const cxL=hx-hr*0.42, cxR=hx+hr*0.20; function ear(cx,sign){ const th=sign*0.22, ct=Math.cos(th), st=Math.sin(th); const p1={x:cx-half,y:baseY}, p2={x:cx+half,y:baseY}, p3={x:cx,y:baseY-height}; function rot(p){ const dx=p.x-cx, dy=p.y-baseY; return {x:cx+dx*ct-dy*st, y:baseY+dx*st+dy*ct}; } const r1=rot(p1), r2=rot(p2), r3=rot(p3); ctx.beginPath(); ctx.moveTo(r1.x,r1.y); ctx.lineTo(r2.x,r2.y); ctx.lineTo(r3.x,r3.y); ctx.closePath(); ctx.fill(); ctx.stroke(); } ear(cxL,-1); ear(cxR,1); const wag=Math.sin(state.time*2)*h*0.04; ctx.strokeStyle=c; ctx.lineWidth=2; ctx.globalAlpha=0.9; ctx.beginPath(); ctx.moveTo(w*0.55,-h*0.05); ctx.quadraticCurveTo(w*0.86,-h*0.38+wag,w*0.48,-h*0.56+wag); ctx.quadraticCurveTo(w*0.28,-h*0.70+wag,w*0.40,-h*0.24+wag*0.6); ctx.stroke(); ctx.globalAlpha=1; const eyeOffset=hr*0.36, eyeY=hy+hr*0.02; for(const ex of [hx-eyeOffset, hx+eyeOffset*0.25]){ const g=ctx.createRadialGradient(ex,eyeY,0.1,ex,eyeY,3); g.addColorStop(0,'rgba(170,255,68,0.9)'); g.addColorStop(1,'rgba(170,255,68,0)'); ctx.fillStyle=g; ctx.beginPath(); ctx.arc(ex,eyeY,3,0,Math.PI*2); ctx.fill(); ctx.fillStyle='#caff59'; ctx.beginPath(); ctx.ellipse(ex,eyeY,2.2,1.5,0,0,Math.PI*2); ctx.fill(); } ctx.strokeStyle='#b7dfff'; ctx.lineWidth=1; for(let i=-1;i<=1;i++){ const yy=hy+i*3; ctx.beginPath(); ctx.moveTo(hx-2,yy); ctx.lineTo(hx-20,yy-1); ctx.stroke(); ctx.beginPath(); ctx.moveTo(hx+2,yy); ctx.lineTo(hx+18,yy-1); ctx.stroke(); } ctx.strokeStyle=c; ctx.lineWidth=2; ctx.globalAlpha=0.9; ctx.beginPath(); ctx.ellipse(0,0,w*0.58,h*0.36,0,0,Math.PI*2); ctx.stroke(); ctx.beginPath(); ctx.arc(hx,hy,hr,0,Math.PI*2); ctx.stroke(); ctx.globalAlpha=1; }
 
   // ---- obstacles
-  function drawObstacle(o){ if(o.flying){ ctx.save(); ctx.translate(o.fx??0,o.fy??0); if(o.rot) ctx.rotate(o.rot); const s=o.fs??1; ctx.scale(s,s); drawCatSprite(); ctx.restore(); return;} const y=o.y, x=laneXAtY(o.lane,y); ctx.save(); ctx.translate(x,y); const t=clamp((y-horizonY)/(H-horizonY),0,1); const s=clamp(lerp(0.25,1.1,t),0.25,1.1); ctx.scale(s,s); drawCatSprite(); ctx.restore(); }
+  function drawObstacle(o){ if(o.flying){ ctx.save(); ctx.translate(o.fx??0,o.fy??0); if(o.rot) ctx.rotate(o.rot); const s=o.fs??1, mx=o.mirror?-1:1; ctx.scale(s*mx,s); drawCatSprite(o.col); ctx.restore(); return;} const y=o.y, x=laneXAtY(o.lane,y); ctx.save(); ctx.translate(x,y); const t=clamp((y-horizonY)/(H-horizonY),0,1); const s=clamp(lerp(0.25,1.1,t),0.25,1.1), mx=o.mirror?-1:1; ctx.scale(s*mx,s); drawCatSprite(o.col); ctx.restore(); }
   function collide(o){ if(o.lane!==player.lane) return false; const gateY=horizonY+0.80*(playerY-horizonY); if(o.y<gateY) return false; const hitZone=28; return Math.abs(o.y-playerY)<hitZone; }
-  function resetGame(){ state.distance=0; state.hits=0; state.lives=4; state.gameOver=false; state.stopUntil=0; obstacles.length=0; nextSpawn=state.time+1.2; }
+  function resetGame(){ state.distance=0; state.hits=0; state.lives=4; state.gameOver=false; state.stopUntil=0; obstacles.length=0; nextSpawn=state.time+1.2; state.health=1; healths.length=0; nextHeal=state.time+2.0; }
   function addHighScore(d){ const v=Math.max(0,Math.floor(d)); state.highScores.push(v); state.highScores.sort((a,b)=>b-a); if(state.highScores.length>3) state.highScores.length=3; }
 
   // ---- HUDs
   function drawCanvasHUD(){ const dist=Math.floor(state.distance), heartsTotal=4, heartsLeft=clamp(state.lives,0,heartsTotal); ctx.save(); ctx.font='bold 14px monospace'; ctx.textAlign='left'; ctx.textBaseline='top'; const padding=6, lineH=18, boxW=Math.floor(180*0.7), boxH=lineH*3+padding*2, x=W-boxW-8; let y=8; if(titleBox) y=Math.max(y, Math.round(titleBox.top+titleBox.height+12)); y=clamp(y,8,H-boxH-8); ctx.globalAlpha=0.85; ctx.fillStyle='#00000066'; ctx.fillRect(x,y,boxW,boxH); ctx.globalAlpha=1; ctx.shadowColor='#00f5ff'; ctx.shadowBlur=6; ctx.strokeStyle='#00f5ff88'; ctx.lineWidth=1.5; ctx.strokeRect(x+0.5,y+0.5,boxW-1,boxH-1); ctx.shadowBlur=0; const tx=x+padding, ty=y+padding; ctx.fillStyle='#ffffff'; ctx.fillText('Distance: '+dist,tx,ty); ctx.fillText('Life:',tx,ty+lineH); const heartSize=7.5; let hx=tx+44, hy=ty+lineH+4; function heart(hx_,hy_,s,filled){ ctx.save(); if(filled){ ctx.shadowColor='#ff2e93'; ctx.shadowBlur=6; } ctx.beginPath(); ctx.moveTo(hx_,hy_+s*0.6); ctx.bezierCurveTo(hx_-s*1.2,hy_+s*0.2,hx_-s*1.2,hy_-s*0.6,hx_,hy_-s*0.1); ctx.bezierCurveTo(hx_+s*1.2,hy_-s*0.6,hx_+s*1.2,hy_+s*0.2,hx_,hy_+s*0.6); if(filled){ const gr=ctx.createLinearGradient(0,hy_-s,0,hy_+s); gr.addColorStop(0,'#ff9ac5'); gr.addColorStop(1,'#ff2e93'); ctx.fillStyle=gr; ctx.fill(); } ctx.shadowBlur=0; ctx.lineWidth=1.5; ctx.strokeStyle=filled?'#ff2e93':'#ff2e93aa'; ctx.stroke(); ctx.restore(); }
-    for(let i=0;i<heartsTotal;i++) heart(hx+i*(heartSize*2.2),hy,heartSize,i<heartsLeft); ctx.restore(); }
+for(let i=0;i<heartsTotal;i++) heart(hx+i*(heartSize*2.2),hy,heartSize,i<heartsLeft);
+
+// Lean label + compact right-aligned health bar
+ctx.fillStyle = '#ffffff';
+ctx.fillText('Lean:', tx, ty + lineH*2);
+const barH = 6, innerW = boxW - padding*2;
+const barW = Math.floor(innerW * 0.55);
+const barY = ty + lineH*2 + 4;
+const barX = tx + innerW - barW; // right-align inside box
+ctx.fillStyle = '#00000066'; ctx.fillRect(barX, barY, barW, barH);
+ctx.save(); ctx.shadowColor='#39ff14'; ctx.shadowBlur=8; ctx.fillStyle='#39ff14'; ctx.fillRect(barX, barY, barW * clamp(state.health,0,1), barH); ctx.restore();
+
+ctx.restore(); }
   function drawHighScoresHUD(){ ctx.save(); ctx.font='bold 14px monospace'; ctx.textAlign='left'; ctx.textBaseline='top'; const padding=6, lineH=18, boxW=Math.floor(180*0.7), boxH=lineH*4+padding*2, x=8; let y=8; if(titleBox) y=Math.max(y, Math.round(titleBox.top+titleBox.height+12)); y=clamp(y,8,H-boxH-8); ctx.globalAlpha=0.85; ctx.fillStyle='#00000066'; ctx.fillRect(x,y,boxW,boxH); ctx.globalAlpha=1; ctx.shadowColor='#00f5ff'; ctx.shadowBlur=6; ctx.strokeStyle='#00f5ff88'; ctx.lineWidth=1.5; ctx.strokeRect(x+0.5,y+0.5,boxW-1,boxH-1); ctx.shadowBlur=0; const tx=x+padding, ty=y+padding; ctx.fillStyle='#ffffff'; ctx.fillText('High Scores',tx,ty); for(let i=0;i<3;i++){ const v=state.highScores[i]; const txt=(typeof v==='number')?String(v):'-----'; ctx.fillText(`${i+1}. ${txt}`, tx, ty+(i+1)*lineH); } ctx.restore(); }
 
   // ---- palms
@@ -124,8 +135,16 @@
     let idx=0; for(const o of bankOut) leaf(axisOut,o,idx++); for(const o of bankIn) leaf(axisIn,o,idx++); ctx.restore(); }
 
   // ---- update
-  function update(dt){ state.time+=dt; updateSmoke(dt); updatePoofs(dt); if(!state.gameOver && state.time>=nextSpawn) spawnObstacle(); const moving=(state.gameOver||state.time<state.stopUntil)?0:state.normalSpeed*SPEED_SCALE; palms.forEach(p=>{ p.y+=moving*dt*0.8; if(p.y>H+64) p.y=-Math.random()*H; }); obstacles.forEach(o=>{ if(o.flying){ o.vy=(o.vy??0)+(o.gravity??220)*dt; o.fx+=(o.vx??0)*dt; o.fy+=(o.vy??0)*dt; if(o.rvel){ o.rot=(o.rot||0)+o.rvel*dt; } if(o.fs) o.fs*=0.995; } else { const t=clamp((o.y-horizonY)/(H-horizonY),0,1); const early=t<0.5?(0.4+1.2*t):1.0; o.y+=moving*dt*obstacleSpeedFactor*early; } }); state.distance+=moving*dt/10; if(moving>0){ for(const o of obstacles){ if(!o.passed && collide(o)){ o.passed=true; state.hits++; if(state.lives>0) state.lives--; if(state.lives<=0 && !state.gameOver){ const yHit=o.y, xHit=laneXAtY(o.lane,yHit); const tScale=clamp((yHit-horizonY)/(H-horizonY),0,1); const sScale=clamp(lerp(0.25,1.1,tScale),0.25,1.1); o.flying=true; o.fx=xHit; o.fy=yHit; o.fs=sScale; o.rot=0; o.vx=(Math.random()<0.5?-1:1)*(160+Math.random()*140); o.vy=-(140+Math.random()*180); o.rvel=(Math.random()*2-1)*6; o.gravity=300; spawnPoof(xHit,yHit,sScale); addHighScore(state.distance); state.gameOver=true; state.restartAt=state.time+3.0; state.stopUntil=0; } else { const yHit=o.y, xHit=laneXAtY(o.lane,yHit); const tScale=clamp((yHit-horizonY)/(H-horizonY),0,1); const sScale=clamp(lerp(0.25,1.1,tScale),0.25,1.1); o.flying=true; o.fx=xHit; o.fy=yHit; o.fs=sScale; o.rot=0; o.vx=(Math.random()<0.5?-1:1)*(140+Math.random()*120); o.vy=-(120+Math.random()*160); o.rvel=(Math.random()*2-1)*6; o.gravity=300; spawnPoof(xHit,yHit,sScale); state.stopUntil=state.time+2.0; } break; } } }
+  function update(dt){ state.time+=dt; updateSmoke(dt); updatePoofs(dt);
+    // health drains at a constant rate: full -> empty in 10s
+    state.health=clamp((state.health??1)-dt/10,0,1); if(state.health<=0 && !state.gameOver){ addHighScore(state.distance); state.gameOver=true; state.restartAt=state.time+3.0; state.stopUntil=0; }
+    if(!state.gameOver && state.time>=nextHeal) spawnHealth(); if(!state.gameOver && state.time>=nextSpawn) spawnObstacle(); const moving=(state.gameOver||state.time<state.stopUntil)?0:state.normalSpeed*SPEED_SCALE; palms.forEach(p=>{ p.y+=moving*dt*0.8; if(p.y>H+64) p.y=-Math.random()*H; }); obstacles.forEach(o=>{ if(o.flying){ o.vy=(o.vy??0)+(o.gravity??220)*dt; o.fx+=(o.vx??0)*dt; o.fy+=(o.vy??0)*dt; if(o.rvel) o.rot=(o.rot||0)+o.rvel*dt; if(o.fs) o.fs*=0.995; } else { const t=clamp((o.y-horizonY)/(H-horizonY),0,1); const early=t<0.5?(0.4+1.2*t):1.0; o.y+=moving*dt*obstacleSpeedFactor*early; } }); healths.forEach(h=>{ const t=clamp((h.y-horizonY)/(H-horizonY),0,1); const early=t<0.5?(0.4+1.2*t):1.0; h.y+=moving*dt*obstacleSpeedFactor*early; });
+    // collect health pickups
+    for(let i=healths.length-1;i>=0;i--){ const h=healths[i]; if(collide(h)){ state.health=clamp(state.health+HEALTH_REPLENISH,0,1); healths.splice(i,1);} }
+    state.distance+=moving*dt/10; if(moving>0){ for(const o of obstacles){ if(!o.passed && collide(o)){ o.passed=true; state.hits++; if(state.lives>0) state.lives--; if(state.lives<=0 && !state.gameOver){ const yHit=o.y, xHit=laneXAtY(o.lane,yHit); const tScale=clamp((yHit-horizonY)/(H-horizonY),0,1); const sScale=clamp(lerp(0.25,1.1,tScale),0.25,1.1); o.flying=true; o.fx=xHit; o.fy=yHit; o.fs=sScale; o.rot=0; o.vx=(Math.random()<0.5?-1:1)*(160+Math.random()*140); o.vy=-(140+Math.random()*180); o.rvel=(Math.random()*2-1)*6; o.gravity=300; spawnPoof(xHit,yHit,sScale); addHighScore(state.distance); state.gameOver=true; state.restartAt=state.time+3.0; state.stopUntil=0; } else { const yHit=o.y, xHit=laneXAtY(o.lane,yHit); const tScale=clamp((yHit-horizonY)/(H-horizonY),0,1); const sScale=clamp(lerp(0.25,1.1,tScale),0.25,1.1); o.flying=true; o.fx=xHit; o.fy=yHit; o.fs=sScale; o.rot=0; o.vx=(Math.random()<0.5?-1:1)*(140+Math.random()*120); o.vy=-(120+Math.random()*160); o.rvel=(Math.random()*2-1)*6; o.gravity=300; spawnPoof(xHit,yHit,sScale); state.stopUntil=state.time+2.0; } break; } } }
     for(let i=obstacles.length-1;i>=0;i--){ const o=obstacles[i]; if(o.flying){ if(o.fx<-64||o.fx>W+64||o.fy<-64||o.fy>H+64) obstacles.splice(i,1); } else if(o.y>H+64) obstacles.splice(i,1); }
+    // prune health pickups off-screen
+    for(let i=healths.length-1;i>=0;i--){ if(healths[i].y>H+64) healths.splice(i,1); }
     if(state.gameOver && state.time>=state.restartAt) resetGame(); }
 
   // ---- draw
@@ -136,6 +155,7 @@
     palms.forEach(p=>drawPalm(p.y,p.side));
     drawPlayer();
     obstacles.forEach(drawObstacle);
+    healths.forEach(drawHealthItem);
     drawPoofs();
     drawCanvasHUD();
     // mirrored scores HUD
@@ -145,17 +165,62 @@
   }
 
   // ---- palms array init already done; main loop
-  let last=0; function loop(t){ const now=t/1000, dt=Math.min(0.033,(last?now-last:0)); last=now; update(dt); ctx.clearRect(0,0,W,H); draw(); requestAnimationFrame(loop); } requestAnimationFrame(loop);
+  let last=0; function loop(t){ const now=t/1000, dt=Math.min(0.033,(last?now-last:0)); last=now; if(!state.started){ ctx.clearRect(0,0,W,H); if(bg){ ctx.drawImage(bg,0,0); drawTitleAndSmoke(SUN_Y,SUN_R); } else { const g=ctx.createLinearGradient(0,0,0,H); g.addColorStop(0,'#2a0036'); g.addColorStop(1,'#1b0033'); ctx.fillStyle=g; ctx.fillRect(0,0,W,H); drawTitleAndSmoke(SUN_Y,SUN_R); } requestAnimationFrame(loop); return; } update(dt); ctx.clearRect(0,0,W,H); draw(); requestAnimationFrame(loop); } requestAnimationFrame(loop);
 
   // ---- fit + build bg
   function fit(){ const ww=window.innerWidth, wh=window.innerHeight; const s=Math.min(ww/W, wh/H); canvas.style.width=Math.floor(W*s)+'px'; canvas.style.height=Math.floor(H*s)+'px'; buildBG(); }
   window.addEventListener('resize',fit); fit();
+  // start button wiring
+  const startBtn=document.getElementById('startBtn'), startOv=document.getElementById('startOverlay');
+  if(startBtn&&startOv){ startBtn.addEventListener('click',()=>{ state.started=true; startOv.style.display='none'; }); }
+
+  // ---- HEALTH FEATURE (minimal block appended)
+  function spawnHealth(){
+    // pick a lane not within 0.5s of a cat spawn in same lane
+    let lane=(Math.random()*LANES)|0, tries=0;
+    while(tries<LANES && state.time - (lastCatSpawn[lane]||-99) < 0.5){ lane=(lane+1)%LANES; tries++; }
+    if(tries>=LANES && state.time - (lastCatSpawn[lane]||-99) < 0.5){ nextHeal+=0.2; return; }
+    healths.push({lane,y:horizonY+2, mirror:Math.random()<0.5});
+    nextHeal=state.time + (3000+Math.random()*1000)/1000; // 2–3s
+  }
+  function drawHealthItem(h){
+    const y=h.y, x=laneXAtY(h.lane,y);
+    ctx.save(); ctx.translate(x,y);
+    const t=clamp((y-horizonY)/(H-horizonY),0,1);
+    const s=clamp(lerp(0.25,1.1,t),0.25,1.1);
+    const mx=h.mirror?-1:1; ctx.scale(s*mx,s);
+
+    // 20% longer stick
+    const L = 24 * 1.2; // length
+    const half = L / 2;
+
+    // base white stick
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(-half, -2, L, 4);
+
+    // glowing red tip on the rightmost 15%
+    const tip = L * 0.15;
+    ctx.save();
+    ctx.shadowColor = '#ff0022';
+    ctx.shadowBlur = 10;
+    ctx.fillStyle = '#ff0022';
+    ctx.fillRect(half - tip, -2, tip, 4);
+    ctx.restore();
+
+    ctx.restore();
+  }
 })();
 </script>
   <style>
 #musicControls{position:fixed;top:8px;left:8px;z-index:3;display:flex;gap:6px}
 #musicControls button{font:700 12px/1 monospace;color:#fff;background:#0008;border:1px solid #00f5ff88;border-radius:6px;padding:6px 8px}
 #musicControls button:active{transform:translateY(1px)}
+#startOverlay{position:fixed;inset:0;display:grid;place-items:center;z-index:5}
+#startBtn{font:900 clamp(16px,4vmin,28px)/1 monospace;color:#fff;background:hsla(136,70%,43%,0.82);border:2px solid #39ff14;border-radius:16px;padding:clamp(12px,3vmin,20px) clamp(24px,8vmin,48px);width:33vmin;height:18vmin;box-shadow:0 0 24px #39ff1444,0 0 8px #39ff14 inset;text-transform:uppercase;letter-spacing:1px}
+#startBtn:hover{filter:brightness(1.05)}
+#startBtn:active{transform:translateY(1px)}
+#startTip{position:fixed;left:50%;transform:translateX(-50%);top:65vh;font:700 clamp(25px,4.6vmin,34px)/1 monospace;color:#fff;text-shadow:0 0 10px #ffea70,0 0 20px #ffea70;white-space:nowrap}
+#startTip2{position:fixed;left:50%;transform:translateX(-50%);top:calc(65vh + 6vmin);font:700 clamp(25px,4.6vmin,34px)/1 monospace;color:#fff;text-shadow:0 0 10px #ffea70,0 0 20px #ffea70;white-space:nowrap}
 </style>
 
 <div id="musicControls">
