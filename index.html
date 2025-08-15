@@ -152,5 +152,27 @@
   window.addEventListener('resize',fit); fit();
 })();
 </script>
+  <style>
+#musicControls{position:fixed;top:8px;left:8px;z-index:3;display:flex;gap:6px}
+#musicControls button{font:700 12px/1 monospace;color:#fff;background:#0008;border:1px solid #00f5ff88;border-radius:6px;padding:6px 8px}
+#musicControls button:active{transform:translateY(1px)}
+</style>
+
+<div id="musicControls">
+  <button id="btnPlay">▶</button>
+  <button id="btnMute">🔇</button>
+</div>
+<audio id="bgm" preload="auto" loop src="music.mp3" crossorigin="anonymous"></audio>
+
+<script>
+(()=>{const el=document.getElementById('bgm'),bp=document.getElementById('btnPlay'),bm=document.getElementById('btnMute');if(!el||!bp||!bm)return;
+el.volume=.45;el.muted=false;function sync(){try{const st=el.paused?'paused':'playing';bp.textContent=el.paused?'▶':'⏸';bm.textContent=el.muted?'🔈':'🔇'}catch{}}
+function start(){el.play().then(sync).catch(()=>{});} addEventListener('pointerdown',start,{once:true});addEventListener('keydown',start,{once:true});
+bp.addEventListener('click',()=>{if(el.paused)el.play().catch(()=>{});else el.pause();sync()});
+bm.addEventListener('click',()=>{el.muted=!el.muted;sync()});
+addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&!el.paused)el.play().catch(()=>{})});
+sync();
+})();
+</script>
 </body>
 </html>
