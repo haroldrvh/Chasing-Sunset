@@ -29,7 +29,7 @@
   const SPEED_SCALE=0.5;
 
   // ---- state
-  const state={ time:0, normalSpeed:120, stopUntil:0, distance:0, hits:0, lives:4, gameOver:false, restartAt:0, highScores:[], started:false };
+  const state={ time:0, normalSpeed:120, stopUntil:0, distance:0, hits:0, lives:4, gameOver:false, restartAt:0, highScores:[], started:false, deathReason:null };
   const obstacleSpeedFactor=0.88;
 
   // ---- health system (minimal vars)
@@ -38,6 +38,8 @@
   let nextHeal=2.0;                    // first spawn ~2s
   const lastCatSpawn=new Array(LANES).fill(-99);
   let lastCatLane=-1;
+  let lastCatSpawnTime=-99;
+  const lastHealthSpawn=new Array(LANES).fill(-99);
   const HEALTH_REPLENISH=0.5;          // +50% bar per pickup
 
   // ---- title smoke
@@ -78,7 +80,13 @@
   window.addEventListener('touchstart',e=>{ const x=e.touches[0].clientX; if(x<window.innerWidth/2) player.lane=Math.max(0,player.lane-1); else player.lane=Math.min(LANES-1,player.lane+1); });
 
   // ---- spawn
-  const obstacles=[]; let nextSpawn=1.2; function spawnObstacle(){ let lane=(Math.random()*LANES)|0; if(lane===lastCatLane) lane=(lane+1)%LANES; obstacles.push({lane,y:horizonY+2,type:'cat',passed:false,flashT:0,mirror:Math.random()<0.5,col:['#ffffff','#ffea70','#ff7a00'][(Math.random()*3)|0]}); lastCatLane=lane; lastCatSpawn[lane]=state.time; nextSpawn=state.time + (1000+Math.random()*1000)/1000; }
+  const obstacles=[]; let nextSpawn=1.0; function spawnObstacle(){ let lane=(Math.random()*LANES)|0; if(lane===lastCatLane) lane=(lane+1)%LANES; 
+  // avoid cats spawning within 0.7s of a recent health in the same lane
+  let tries=0;
+  while(tries<LANES && state.time - (lastHealthSpawn[lane]||-99) < 0.7){ lane=(lane+1)%LANES; tries++; }
+  if(tries>=LANES && state.time - (lastHealthSpawn[lane]||-99) < 0.7){ nextSpawn += 0.2; return; }
+  obstacles.push({lane,y:horizonY+2,type:'cat',passed:false,flashT:0,mirror:Math.random()<0.5,col:['#ffffff','#ffea70','#ff7a00'][(Math.random()*3)|0]}); lastCatLane=lane; lastCatSpawn[lane]=state.time; const gap=state.time - lastCatSpawnTime; lastCatSpawnTime=state.time;
+  nextSpawn = state.time + ((gap<1.3?1300:800) + Math.random()*(gap<1.3?500:1000))/1000; }
   const palms=[]; function spawnPalm(side){ palms.push({side,y:-Math.random()*H}); } for(let i=0;i<12;i++){ spawnPalm(-1); spawnPalm(1); }
 
   // ---- draw title & smoke over cached bg
@@ -109,8 +117,16 @@
 
   // ---- obstacles
   function drawObstacle(o){ if(o.flying){ ctx.save(); ctx.translate(o.fx??0,o.fy??0); if(o.rot) ctx.rotate(o.rot); const s=o.fs??1, mx=o.mirror?-1:1; ctx.scale(s*mx,s); drawCatSprite(o.col); ctx.restore(); return;} const y=o.y, x=laneXAtY(o.lane,y); ctx.save(); ctx.translate(x,y); const t=clamp((y-horizonY)/(H-horizonY),0,1); const s=clamp(lerp(0.25,1.1,t),0.25,1.1), mx=o.mirror?-1:1; ctx.scale(s*mx,s); drawCatSprite(o.col); ctx.restore(); }
-  function collide(o){ if(o.lane!==player.lane) return false; const gateY=horizonY+0.80*(playerY-horizonY); if(o.y<gateY) return false; const hitZone=28; return Math.abs(o.y-playerY)<hitZone; }
-  function resetGame(){ state.distance=0; state.hits=0; state.lives=4; state.gameOver=false; state.stopUntil=0; obstacles.length=0; nextSpawn=state.time+1.2; state.health=1; healths.length=0; nextHeal=state.time+2.0; }
+  function collide(o){
+  if(o.lane!==player.lane) return false;
+  // Cats must be 5% further along the road before counting as a hit
+  const gateFactor = (o.type==='cat') ? 0.85 : 0.80;
+  const gateY = horizonY + gateFactor*(playerY - horizonY);
+  if(o.y<gateY) return false;
+  const hitZone=28;
+  return Math.abs(o.y-playerY)<hitZone;
+}
+  function resetGame(){ state.distance=0; state.hits=0; state.lives=4; state.gameOver=false; state.stopUntil=0; obstacles.length=0; nextSpawn=state.time+1.2; state.health=1; healths.length=0; nextHeal=state.time+2.0; state.deathReason=null; }
   function addHighScore(d){ const v=Math.max(0,Math.floor(d)); state.highScores.push(v); state.highScores.sort((a,b)=>b-a); if(state.highScores.length>3) state.highScores.length=3; }
 
   // ---- HUDs
@@ -137,11 +153,11 @@ ctx.restore(); }
   // ---- update
   function update(dt){ state.time+=dt; updateSmoke(dt); updatePoofs(dt);
     // health drains at a constant rate: full -> empty in 10s
-    state.health=clamp((state.health??1)-dt/10,0,1); if(state.health<=0 && !state.gameOver){ addHighScore(state.distance); state.gameOver=true; state.restartAt=state.time+3.0; state.stopUntil=0; }
+    state.health=clamp((state.health??1)-dt/10,0,1); if(state.health<=0 && !state.gameOver){ state.deathReason='health'; addHighScore(state.distance); state.gameOver=true; state.restartAt = state.time+4.0; state.stopUntil=0; }
     if(!state.gameOver && state.time>=nextHeal) spawnHealth(); if(!state.gameOver && state.time>=nextSpawn) spawnObstacle(); const moving=(state.gameOver||state.time<state.stopUntil)?0:state.normalSpeed*SPEED_SCALE; palms.forEach(p=>{ p.y+=moving*dt*0.8; if(p.y>H+64) p.y=-Math.random()*H; }); obstacles.forEach(o=>{ if(o.flying){ o.vy=(o.vy??0)+(o.gravity??220)*dt; o.fx+=(o.vx??0)*dt; o.fy+=(o.vy??0)*dt; if(o.rvel) o.rot=(o.rot||0)+o.rvel*dt; if(o.fs) o.fs*=0.995; } else { const t=clamp((o.y-horizonY)/(H-horizonY),0,1); const early=t<0.5?(0.4+1.2*t):1.0; o.y+=moving*dt*obstacleSpeedFactor*early; } }); healths.forEach(h=>{ const t=clamp((h.y-horizonY)/(H-horizonY),0,1); const early=t<0.5?(0.4+1.2*t):1.0; h.y+=moving*dt*obstacleSpeedFactor*early; });
     // collect health pickups
     for(let i=healths.length-1;i>=0;i--){ const h=healths[i]; if(collide(h)){ state.health=clamp(state.health+HEALTH_REPLENISH,0,1); healths.splice(i,1);} }
-    state.distance+=moving*dt/10; if(moving>0){ for(const o of obstacles){ if(!o.passed && collide(o)){ o.passed=true; state.hits++; if(state.lives>0) state.lives--; if(state.lives<=0 && !state.gameOver){ const yHit=o.y, xHit=laneXAtY(o.lane,yHit); const tScale=clamp((yHit-horizonY)/(H-horizonY),0,1); const sScale=clamp(lerp(0.25,1.1,tScale),0.25,1.1); o.flying=true; o.fx=xHit; o.fy=yHit; o.fs=sScale; o.rot=0; o.vx=(Math.random()<0.5?-1:1)*(160+Math.random()*140); o.vy=-(140+Math.random()*180); o.rvel=(Math.random()*2-1)*6; o.gravity=300; spawnPoof(xHit,yHit,sScale); addHighScore(state.distance); state.gameOver=true; state.restartAt=state.time+3.0; state.stopUntil=0; } else { const yHit=o.y, xHit=laneXAtY(o.lane,yHit); const tScale=clamp((yHit-horizonY)/(H-horizonY),0,1); const sScale=clamp(lerp(0.25,1.1,tScale),0.25,1.1); o.flying=true; o.fx=xHit; o.fy=yHit; o.fs=sScale; o.rot=0; o.vx=(Math.random()<0.5?-1:1)*(140+Math.random()*120); o.vy=-(120+Math.random()*160); o.rvel=(Math.random()*2-1)*6; o.gravity=300; spawnPoof(xHit,yHit,sScale); state.stopUntil=state.time+2.0; } break; } } }
+    state.distance+=moving*dt/10; if(moving>0){ for(const o of obstacles){ if(!o.passed && collide(o)){ o.passed=true; state.hits++; if(state.lives>0) state.lives--; if(state.lives<=0 && !state.gameOver){ const yHit=o.y, xHit=laneXAtY(o.lane,yHit); const tScale=clamp((yHit-horizonY)/(H-horizonY),0,1); const sScale=clamp(lerp(0.25,1.1,tScale),0.25,1.1); o.flying=true; o.fx=xHit; o.fy=yHit; o.fs=sScale; o.rot=0; o.vx=(Math.random()<0.5?-1:1)*(160+Math.random()*140); o.vy=-(140+Math.random()*180); o.rvel=(Math.random()*2-1)*6; o.gravity=300; spawnPoof(xHit,yHit,sScale); state.deathReason='life'; addHighScore(state.distance); state.gameOver=true; state.restartAt = state.time+4.0; state.stopUntil=0; } else { const yHit=o.y, xHit=laneXAtY(o.lane,yHit); const tScale=clamp((yHit-horizonY)/(H-horizonY),0,1); const sScale=clamp(lerp(0.25,1.1,tScale),0.25,1.1); o.flying=true; o.fx=xHit; o.fy=yHit; o.fs=sScale; o.rot=0; o.vx=(Math.random()<0.5?-1:1)*(140+Math.random()*120); o.vy=-(120+Math.random()*160); o.rvel=(Math.random()*2-1)*6; o.gravity=300; spawnPoof(xHit,yHit,sScale); state.stopUntil=state.time+2.0; } break; } } }
     for(let i=obstacles.length-1;i>=0;i--){ const o=obstacles[i]; if(o.flying){ if(o.fx<-64||o.fx>W+64||o.fy<-64||o.fy>H+64) obstacles.splice(i,1); } else if(o.y>H+64) obstacles.splice(i,1); }
     // prune health pickups off-screen
     for(let i=healths.length-1;i>=0;i--){ if(healths[i].y>H+64) healths.splice(i,1); }
@@ -160,7 +176,17 @@ ctx.restore(); }
     drawCanvasHUD();
     // mirrored scores HUD
     ctx.save(); drawHighScoresHUD(); ctx.restore();
-    if(state.gameOver){ ctx.save(); const msg='GAME OVER'; let fs=Math.floor(H/3); ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.font='900 '+fs+'px monospace'; let m=ctx.measureText(msg); if(m.width>W*0.92){ fs=Math.floor(fs*(W*0.92/m.width)); ctx.font='900 '+fs+'px monospace'; } const blink=(Math.sin(state.time*5)>0)?1.0:0.75; ctx.globalAlpha=blink; ctx.shadowColor='#ff0022'; ctx.shadowBlur=Math.max(12,Math.floor(fs*0.2)); const grad=ctx.createLinearGradient(0,(H/2)-fs*0.6,0,(H/2)+fs*0.6); grad.addColorStop(0,'#ffd1d6'); grad.addColorStop(0.35,'#ff3350'); grad.addColorStop(1,'#a40014'); ctx.fillStyle=grad; ctx.fillText(msg,cx,H*0.5); ctx.shadowBlur=0; ctx.lineWidth=Math.max(3,Math.floor(fs*0.065)); ctx.strokeStyle='#51000c'; ctx.strokeText(msg,cx,H*0.5); ctx.restore(); }
+    if(state.gameOver){ ctx.save(); const msg='GAME OVER'; let fs=Math.floor(H/3); ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.font='900 '+fs+'px monospace'; let m=ctx.measureText(msg); if(m.width>W*0.92){ fs=Math.floor(fs*(W*0.92/m.width)); ctx.font='900 '+fs+'px monospace'; } const blink=(Math.sin(state.time*5)>0)?1.0:0.75; ctx.globalAlpha=blink; ctx.shadowColor='#ff0022'; ctx.shadowBlur=Math.max(12,Math.floor(fs*0.2)); const grad=ctx.createLinearGradient(0,(H/2)-fs*0.6,0,(H/2)+fs*0.6); grad.addColorStop(0,'#ffd1d6'); grad.addColorStop(0.35,'#ff3350'); grad.addColorStop(1,'#a40014'); ctx.fillStyle=grad; ctx.fillText(msg,cx,H*0.5); ctx.shadowBlur=0; ctx.lineWidth=Math.max(3,Math.floor(fs*0.065)); ctx.strokeStyle='#51000c'; ctx.strokeText(msg,cx,H*0.5);
+      // game-over subtext based on death reason
+      ctx.font='bold '+Math.max(12,Math.floor(fs*0.18))+'px monospace';
+      ctx.fillStyle='#ffffff';
+      const sub=(state.deathReason==='health')?'You became sober':'You killed too many Shmmees';
+      // add black outline to the white subtext
+      ctx.lineWidth=Math.max(2,Math.floor(fs*0.035));
+      ctx.strokeStyle='#000';
+      ctx.strokeText(sub,cx,H*0.5 + fs*0.75);
+      ctx.fillText(sub,cx,H*0.5 + fs*0.75);
+      ctx.restore(); }
     else if(state.time<state.stopUntil){ ctx.save(); const msg="Don't hit the Shmee!"; let fs=64; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.font='900 '+fs+'px monospace'; let metrics=ctx.measureText(msg); if(metrics.width>W*0.95){ fs=Math.floor(fs*(W*0.95/metrics.width)); ctx.font='900 '+fs+'px monospace'; } const y=Math.min(H-fs,H*0.67); const grad=ctx.createLinearGradient(0,y-fs*0.6,0,y+fs*0.6); grad.addColorStop(0,'#ffe5ff'); grad.addColorStop(0.4,'#ff2e93'); grad.addColorStop(1,'#ff0033'); ctx.globalAlpha=1; ctx.shadowColor='#ff0033'; ctx.shadowBlur=Math.max(12,Math.floor(fs*0.25)); ctx.fillStyle=grad; ctx.fillText(msg,cx,y); ctx.shadowBlur=0; ctx.lineWidth=Math.max(3,Math.floor(fs*0.06)); ctx.strokeStyle='#220011'; ctx.strokeText(msg,cx,y); ctx.restore(); }
   }
 
@@ -176,12 +202,13 @@ ctx.restore(); }
 
   // ---- HEALTH FEATURE (minimal block appended)
   function spawnHealth(){
+    // same-lane guard only
     // pick a lane not within 0.5s of a cat spawn in same lane
     let lane=(Math.random()*LANES)|0, tries=0;
     while(tries<LANES && state.time - (lastCatSpawn[lane]||-99) < 0.5){ lane=(lane+1)%LANES; tries++; }
     if(tries>=LANES && state.time - (lastCatSpawn[lane]||-99) < 0.5){ nextHeal+=0.2; return; }
-    healths.push({lane,y:horizonY+2, mirror:Math.random()<0.5});
-    nextHeal=state.time + (3000+Math.random()*1000)/1000; // 2–3s
+    healths.push({lane,y:horizonY+2, mirror:Math.random()<0.5}); lastHealthSpawn[lane]=state.time;
+    nextHeal=state.time + (3000+Math.random()*1000)/1000; // 3–4s
   }
   function drawHealthItem(h){
     const y=h.y, x=laneXAtY(h.lane,y);
