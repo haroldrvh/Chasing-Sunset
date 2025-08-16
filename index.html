@@ -106,6 +106,7 @@
     bgctx.setTransform(pxScale,0,0,pxScale,0,0);
     bgctx.imageSmoothingEnabled = true; bgctx.imageSmoothingQuality = 'high';
     drawStaticBG(bgctx);
+    if (typeof window.__applyStartBG==='function') window.__applyStartBG();
   }
 
   // ---- input
@@ -253,11 +254,31 @@
 
   // ---- start overlay
   const startBtn=document.getElementById('startBtn'), startOv=document.getElementById('startOverlay');
+  // use cached bg canvas for start overlay backdrop (no redraw)
+  window.__applyStartBG = function(){ if(!startOv) return; if(bg){ try{ const url=bg.toDataURL('image/png'); startOv.style.backgroundImage='url('+url+')'; startOv.style.backgroundSize='cover'; startOv.style.backgroundPosition='center'; startOv.style.backgroundRepeat='no-repeat'; }catch(e){} } };
+  window.__applyStartBG();
   if(startBtn&&startOv){ startBtn.addEventListener('click',()=>{
     const el=document.documentElement; const req=el.requestFullscreen||el.webkitRequestFullscreen||el.msRequestFullscreen; 
     const allowed=!!(document.fullscreenEnabled||document.webkitFullscreenEnabled||document.msFullscreenEnabled);
     const isMobile=(/Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) || (window.matchMedia && matchMedia('(pointer:coarse)').matches && Math.max(screen.width,screen.height)<1200);
     if(isMobile && req && allowed){ try{ const p=req.call(el); if(p && typeof p.catch==='function') p.catch(()=>{}); }catch(e){} }
+    state.started=true; startOv.style.display='none';
+  }); }
+
+  // ---- background music controls (restored)
+  const bgm=document.getElementById('bgm'), bp=document.getElementById('btnPlay'), bm=document.getElementById('btnMute');
+  if(bgm && bp && bm){
+    bgm.volume=0.45;
+    const savedMute=localStorage.getItem('lean_mute');
+    if(savedMute!==null) bgm.muted = savedMute==='1';
+    function sync(){ try{ bp.textContent=bgm.paused?'▶':'⏸'; bm.textContent=bgm.muted?'🔈':'🔇'; }catch{}}
+    // start button triggers play (user gesture)
+    if(startBtn) startBtn.addEventListener('click',()=>{ bgm.play().then(sync).catch(()=>{}); });
+    bp.addEventListener('click',()=>{ if(bgm.paused) bgm.play().catch(()=>{}); else bgm.pause(); sync(); });
+    bm.addEventListener('click',()=>{ bgm.muted=!bgm.muted; localStorage.setItem('lean_mute', bgm.muted?'1':'0'); sync(); });
+    document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible' && !bgm.paused) bgm.play().catch(()=>{}); });
+    sync();
+  }catch(e){} }
     state.started=true; startOv.style.display='none';
   }); }
 
@@ -289,7 +310,7 @@
 #musicControls{position:fixed;top:8px;left:8px;z-index:3;display:flex;gap:6px}
 #musicControls button{font:700 12px/1 monospace;color:#fff;background:#0008;border:1px solid #00f5ff88;border-radius:6px;padding:6px 8px}
 #musicControls button:active{transform:translateY(1px)}
-#startOverlay{position:fixed;inset:0;display:grid;place-items:center;z-index:5}
+#startOverlay{position:fixed;inset:0;display:grid;place-items:center;z-index:5;background-position:center;background-size:cover;background-repeat:no-repeat}
 #startBtn{font:900 clamp(16px,4vmin,28px)/1 monospace;color:#fff;background:hsla(136,70%,43%,0.82);border:2px solid #39ff14;border-radius:16px;padding:clamp(12px,3vmin,20px) clamp(24px,8vmin,48px);width:33vmin;height:18vmin;box-shadow:0 0 24px #39ff1444,0 0 8px #39ff14 inset;text-transform:uppercase;letter-spacing:1px}
 #startBtn:hover{filter:brightness(1.05)}
 #startBtn:active{transform:translateY(1px)}
