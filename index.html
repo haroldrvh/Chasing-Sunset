@@ -299,6 +299,7 @@
       const bs=document.getElementById('btnSfx');
       function syncSfx(){ try{ if(bs && sfx) bs.textContent = sfx.muted ? '🙀' : '🐱'; }catch(e){} }
       if(sfx){
+        sfx.volume = 0.6; // 60% of previous loudness
         const savedSfx=localStorage.getItem('lean_sfx_mute');
         if(savedSfx!==null) sfx.muted = savedSfx==='1';
         if(bs){ bs.addEventListener('click',()=>{ sfx.muted=!sfx.muted; localStorage.setItem('lean_sfx_mute', sfx.muted?'1':'0'); syncSfx(); }); }
@@ -310,10 +311,10 @@
 
   // ---- health items
   function spawnHealth(){
-    // pick a lane not within 0.5s of a cat spawn in same lane
+    // pick a lane not within 0.7s of a cat spawn in same lane
     let lane=(Math.random()*LANES)|0, tries=0;
-    while(tries<LANES && state.time - (lastCatSpawn[lane]||-99) < 0.5){ lane=(lane+1)%LANES; tries++; }
-    if(tries>=LANES && state.time - (lastCatSpawn[lane]||-99) < 0.5){ nextHeal+=0.2; return; }
+    while(tries<LANES && state.time - (lastCatSpawn[lane]||-99) < 0.7){ lane=(lane+1)%LANES; tries++; }
+    if(tries>=LANES && state.time - (lastCatSpawn[lane]||-99) < 0.7){ nextHeal+=0.2; return; }
     healths.push({lane,y:horizonY+2, mirror:Math.random()<0.5}); lastHealthSpawn[lane]=state.time;
     nextHeal=state.time + (3000+Math.random()*1000)/1000; // 3–4s
   }
