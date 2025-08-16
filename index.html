@@ -266,19 +266,25 @@
   }); }
 
   // ---- background music controls (restored)
-  const bgm=document.getElementById('bgm'), bp=document.getElementById('btnPlay'), bm=document.getElementById('btnMute');
-  if(bgm && bp && bm){
-    bgm.volume=0.45;
-    const savedMute=localStorage.getItem('lean_mute');
-    if(savedMute!==null) bgm.muted = savedMute==='1';
-    function sync(){ try{ bp.textContent=bgm.paused?'▶':'⏸'; bm.textContent=bgm.muted?'🔈':'🔇'; }catch(e){} }
-    // start button triggers play (user gesture)
-    if(startBtn) startBtn.addEventListener('click',()=>{ bgm.play().then(sync).catch(()=>{}); });
-    bp.addEventListener('click',()=>{ if(bgm.paused) bgm.play().catch(()=>{}); else bgm.pause(); sync(); });
-    bm.addEventListener('click',()=>{ bgm.muted=!bgm.muted; localStorage.setItem('lean_mute', bgm.muted?'1':'0'); sync(); });
-    document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible' && !bgm.paused) bgm.play().catch(()=>{}); });
-    sync();
-  }
+  (function(){
+    function init(){
+      const bgm=document.getElementById('bgm');
+      const bp=document.getElementById('btnPlay');
+      const bm=document.getElementById('btnMute');
+      const startBtn=document.getElementById('startBtn');
+      if(!(bgm && bp && bm)) return;
+      bgm.volume=0.45;
+      const savedMute=localStorage.getItem('lean_mute');
+      if(savedMute!==null) bgm.muted = savedMute==='1';
+      function sync(){ try{ bp.textContent=bgm.paused?'▶':'⏸'; bm.textContent=bgm.muted?'🔈':'🔇'; }catch(e){} }
+      if(startBtn){ startBtn.addEventListener('click',()=>{ bgm.play().then(sync).catch(()=>{}); }); }
+      bp.addEventListener('click',()=>{ if(bgm.paused) bgm.play().catch(()=>{}); else bgm.pause(); sync(); });
+      bm.addEventListener('click',()=>{ bgm.muted=!bgm.muted; localStorage.setItem('lean_mute', bgm.muted?'1':'0'); sync(); });
+      document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible' && !bgm.paused) bgm.play().catch(()=>{}); });
+      sync();
+    }
+    if(document.readyState==='loading') window.addEventListener('DOMContentLoaded', init); else init();
+  })();
 
   // ---- health items
   function spawnHealth(){
