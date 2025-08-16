@@ -25,11 +25,13 @@
   // ---- setup
   const canvas=document.getElementById('game');
   const ctx=canvas.getContext('2d');
-  ctx.imageSmoothingEnabled=true; let bg=null,bgctx=null;
+  ctx.imageSmoothingEnabled=true; ctx.imageSmoothingQuality='high'; let bg=null,bgctx=null;
   const W=canvas.width,H=canvas.height,cx=W/2;
   const horizonY=H*0.45, SUN_Y=horizonY-8, SUN_R=62;
   const roadTopW=44, roadBottomW=W*0.92, LANES=3;
   const SPEED_SCALE=0.5;
+  // HiDPI scale used for crisp rendering when canvas is enlarged
+  let pxScale = 1;
 
   // ---- state
   const state={ time:0, normalSpeed:120, stopUntil:0, distance:0, hits:0, lives:4, gameOver:false, restartAt:0, highScores:[], started:false, paused:false, deathReason:null };
@@ -75,7 +77,18 @@
     g.strokeStyle='#ff2e93'; g.lineWidth=2; g.globalAlpha=0.9; for(let l=1;l<LANES;l++){ g.beginPath(); for(let y=horizonY;y<=H;y+=8){ const e=roadEdgesAtY(y); const xx=e.left+(e.width/LANES)*l; if(y===horizonY) g.moveTo(xx,y); else g.lineTo(xx,y);} g.stroke(); } g.globalAlpha=1;
     g.strokeStyle='#00f5ff'; g.lineWidth=1; g.globalAlpha=0.42; for(let i=0;i<30;i+=2){ const t=i/30; const y=lerp(horizonY,H,t*t); const e=roadEdgesAtY(y); g.beginPath(); g.moveTo(e.left,y); g.lineTo(e.right,y); g.stroke(); } g.globalAlpha=1;
   }
-  function buildBG(){ bg=document.createElement('canvas'); bg.width=W; bg.height=H; bgctx=bg.getContext('2d'); drawStaticBG(bgctx); }
+  function buildBG(){
+    // Build a high-res cached background matching the current backing store size
+    bg = document.createElement('canvas');
+    bg.width = canvas.width;
+    bg.height = canvas.height;
+    bgctx = bg.getContext('2d');
+    // Draw using logical coordinates (W,H) scaled up by pxScale
+    bgctx.setTransform(pxScale,0,0,pxScale,0,0);
+    bgctx.imageSmoothingEnabled = true;
+    bgctx.imageSmoothingQuality = 'high';
+    drawStaticBG(bgctx);
+  }
 
   // ---- input
   const playerY=H*0.78; const player={ lane:1, width:74, height:108, x(){ return laneXAtY(this.lane,playerY);} };
@@ -195,7 +208,15 @@ ctx.restore(); }
     if(state.gameOver && state.time>=state.restartAt) resetGame(); }
 
   // ---- draw
-  function draw(){ if(bg){ ctx.drawImage(bg,0,0); drawTitleAndSmoke(SUN_Y,SUN_R);} else { // fallback
+  function draw(){ if(bg){
+      // Draw cached background 1:1 in device pixels for maximum sharpness
+      ctx.save();
+      ctx.setTransform(1,0,0,1,0,0);
+      ctx.drawImage(bg,0,0);
+      ctx.restore();
+      // Overlay title/smoke in logical space
+      drawTitleAndSmoke(SUN_Y,SUN_R);
+    } else { // fallback
       // If bg not built yet, draw a basic background once
       const g=ctx.createLinearGradient(0,0,0,H); g.addColorStop(0,'#2a0036'); g.addColorStop(1,'#1b0033'); ctx.fillStyle=g; ctx.fillRect(0,0,W,H); drawTitleAndSmoke(SUN_Y,SUN_R);
     }
@@ -246,7 +267,24 @@ ctx.restore(); }
   let last=0; function loop(t){ const now=t/1000, dt=Math.min(0.033,(last?now-last:0)); last=now; if(!state.started){ ctx.clearRect(0,0,W,H); if(bg){ ctx.drawImage(bg,0,0); drawTitleAndSmoke(SUN_Y,SUN_R); } else { const g=ctx.createLinearGradient(0,0,0,H); g.addColorStop(0,'#2a0036'); g.addColorStop(1,'#1b0033'); ctx.fillStyle=g; ctx.fillRect(0,0,W,H); drawTitleAndSmoke(SUN_Y,SUN_R); } requestAnimationFrame(loop); return; } if(!state.paused) update(dt); ctx.clearRect(0,0,W,H); draw(); requestAnimationFrame(loop); } requestAnimationFrame(loop);
 
   // ---- fit + build bg
-  function fit(){ const ww=window.innerWidth, wh=window.innerHeight; const s=Math.min(ww/W, wh/H); canvas.style.width=Math.floor(W*s)+'px'; canvas.style.height=Math.floor(H*s)+'px'; buildBG(); }
+  function fit(){
+    const ww=window.innerWidth, wh=window.innerHeight;
+    const dpr = window.devicePixelRatio || 1;
+    const s=Math.min(ww/W, wh/H);
+    // backing-store scale for crisp rendering
+    pxScale = dpr * s;
+    // CSS display size
+    canvas.style.width=Math.floor(W*s)+'px';
+    canvas.style.height=Math.floor(H*s)+'px';
+    // Actual pixel buffer size
+    canvas.width = Math.floor(W*pxScale);
+    canvas.height = Math.floor(H*pxScale);
+    // Draw everything in logical units and let the context scale
+    ctx.setTransform(pxScale,0,0,pxScale,0,0);
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    buildBG();
+  }
   window.addEventListener('resize',fit); fit();
   // start button wiring
   const startBtn=document.getElementById('startBtn'), startOv=document.getElementById('startOverlay');
