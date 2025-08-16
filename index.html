@@ -286,20 +286,16 @@ nextSpawn   = state.time + min + Math.random() * range;
     if(state.gameOver){ ctx.save(); const msg='GAME OVER'; ctx.textAlign='center'; ctx.textBaseline='middle'; let fs = fitSize(msg, Math.floor(H/3), W*0.92); ctx.font='900 '+fs+'px monospace'; const blink=(Math.sin(state.time*5)>0)?1.0:0.75; ctx.globalAlpha=blink; const grad=ctx.createLinearGradient(0,(H/2)-fs*0.6,0,(H/2)+fs*0.6); grad.addColorStop(0,'#ffd1d6'); grad.addColorStop(0.35,'#ff3350'); grad.addColorStop(1,'#a40014'); drawLabel(msg, cx, H*0.5, { fill:grad, stroke:'#51000c', lw: Math.max(3, Math.floor(fs*0.065)), shadow:{color:'#ff0022', blur:Math.max(12,Math.floor(fs*0.2))} }); ctx.globalAlpha=1; const sub=(state.deathReason==='health')?'You became sober':'You killed too many Shmmees'; const fs2=Math.max(12,Math.floor(fs*0.18)); ctx.font='bold '+fs2+'px monospace'; drawLabel(sub, cx, H*0.5 + fs*0.75, { fill:'#ffffff', stroke:'#000', lw: Math.max(2, Math.floor(fs*0.035)) }); ctx.restore(); }
 else if(state.time<state.stopUntil){
   ctx.save();
-  const msg="Don't hit the Schmee!";
+  const msg="Don't hit the Shmee!";
   ctx.textAlign='center';
   ctx.textBaseline='middle';
   let fs = fitSize(msg, 64, W*0.95);
   ctx.font='900 '+fs+'px monospace';
-
-  // Move message higher: aim at ~60% screen height, but never below the top of the car area
-  const y = Math.min(H - fs, Math.min(H*0.60, playerY - 22));
-
+  const y=Math.min(H-fs,H*0.60);
   const grad=ctx.createLinearGradient(0,y-fs*0.6,0,y+fs*0.6);
   grad.addColorStop(0,'#ffe5ff');
   grad.addColorStop(0.4,'#ff2e93');
   grad.addColorStop(1,'#ff0033');
-
   drawLabel(msg, cx, y, {
     fill:grad,
     stroke:'#220011',
@@ -308,6 +304,7 @@ else if(state.time<state.stopUntil){
   });
   ctx.restore();
 }
+
 
 
   // ---- loop
