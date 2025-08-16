@@ -231,85 +231,166 @@ for (let i=0;i<6;i++){ spawnCactus(-1); spawnCactus(1); }
   // ---- palms
   function drawPalm(y,side){ if(y<horizonY-6||y>H+60) return; const e=roadEdgesAtY(y); const baseX=side<0?e.left-14:e.right+14; const t=clamp((y-horizonY)/(H-horizonY),0,1); const s=clamp(lerp(0.22,1.45,t),0.22,1.45); const trunkH=46*s, trunkW=6; const topX=baseX+(side<0?-6*s:6*s), topY=y-trunkH; ctx.fillStyle='#7a4a1a'; ctx.beginPath(); ctx.moveTo(baseX-trunkW/2,y); ctx.lineTo(baseX+trunkW/2,y); ctx.lineTo(topX+trunkW*0.35,topY); ctx.lineTo(topX-trunkW*0.35,topY); ctx.closePath(); ctx.fill(); const crownX=topX, crownY=topY; ctx.save(); ctx.lineCap='round'; ctx.lineJoin='round'; ctx.strokeStyle='#39ff14'; ctx.lineWidth=Math.max(1.6,2.0*s); const axisOut=(side<0?Math.PI:0)+(side<0?-0.12:0.12), axisIn=axisOut+Math.PI; const bankOut=[-0.80,-0.42,0.36], bankIn=[-0.70,-0.18,0.58]; const len0=30*s; function leaf(axis,off,idx){ const a=axis+off, L=len0*(0.92+0.15*Math.sin(idx*1.7)), spread=0.18*(1-Math.min(1,Math.abs(off)/1.1)), droop=(0.12+0.22*Math.max(0,off))*L; const tipX=crownX+Math.cos(a)*L, tipY=crownY+Math.sin(a)*L+droop; for(const k of [-1,1]){ const ae=a+k*spread, perp=ae+Math.PI/2; const c1x=crownX+Math.cos(ae)*L*0.45+Math.cos(perp)*L*0.12, c1y=crownY+Math.sin(ae)*L*0.45+Math.sin(perp)*L*0.12; const c2x=crownX+Math.cos(ae)*L*0.82-Math.cos(perp)*L*0.15, c2y=crownY+Math.sin(ae)*L*0.82-Math.sin(perp)*L*0.08+droop*0.6; ctx.beginPath(); ctx.moveTo(crownX,crownY); ctx.bezierCurveTo(c1x,c1y,c2x,c2y,tipX,tipY); ctx.stroke(); } }
     let idx=0; for(const o of bankOut) leaf(axisOut,o,idx++); for(const o of bankIn) leaf(axisIn,o,idx++); ctx.restore(); }
-// ---- cacti (closed-outline neon, anti-flicker flowers, farther & smaller)
-function drawCactus(y, side, kind){
-  if (y < horizonY-6 || y > H+60) return;
 
-  // --- placement: 3x farther from road than previous (40 -> 120)
+  // ---- cacti (closed-outline neon, no-flicker flowers, farther & smaller, crash-safe)
+function drawCactus(y, side, kind){
+  // stay in bounds
+  if (y < horizonY - 6 || y > H + 60) return;
+
+  // 3x farther from road (was 40)
   const CACTUS_OFFSET = 120;
   const edge = roadEdgesAtY(y);
-  const x0   = side < 0 ? edge.left - CACTUS_OFFSET : edge.right + CACTUS_OFFSET;
+  const x0 = side < 0 ? edge.left - CACTUS_OFFSET : edge.right + CACTUS_OFFSET;
 
-  // --- perspective scale then halve size globally
+  // perspective scale, then halve globally
   const t  = clamp((y - horizonY) / (H - horizonY), 0, 1);
   const s0 = clamp(lerp(0.20, 1.20, t), 0.20, 1.20);
-  const s  = s0 * 0.5; // half-size
+  const s  = s0 * 0.5;
+  if (!isFinite(s) || s <= 0) return; // hard guard
 
-  // --- neon style
-  const OUTER = '#39ff14', INNER = '#00f5ff66';
-  const glowW = Math.max(3.0, 4.2*s);
-  const glassW= Math.max(1.4, 2.0*s);
-  const glowB = Math.max(10, 16*s);
+  // neon style
+  const OUTER   = '#39ff14';
+  const INNER   = '#00f5ff66';
+  const glowW   = Math.max(3.0, 4.2*s);
+  const glassW  = Math.max(1.4, 2.0*s);
+  const glowB   = Math.max(10, 16*s);
 
-  // --- proportions tuned for classic saguaro look
-  const HTRUNK = 62*s;     // trunk height
-  const TW     = 8*s;      // trunk half "tube" width
-  const R      = 7*s;      // corner radius
-  const lean   = (side<0 ? -0.04 : 0.04);
-  const yBase  = y, yTop = yBase - HTRUNK;
+  // proportions (classic saguaro)
+  const HTRUNK  = 62*s;     // trunk height
+  const TW      = 8*s;      // half tube width
+  const CAPR    = 7*s;      // cap/corner radius
+  const lean    = (side < 0 ? -0.04 : 0.04);
+  const yBase   = y;
+  const yTop    = yBase - HTRUNK;
 
-  // build a single CLOSED outline around trunk + arms
+  // build one CLOSED outline around trunk + arms
   function outlinePath(arms){
-    const left  = arms.filter(a=>a.side<0).sort((a,b)=>a.up-b.up);
-    const right = arms.filter(a=>a.side>0).sort((a,b)=>b.up-a.up);
+    // left arms go up; right arms come down (y order)
+    const left  = arms.filter(a => a.side < 0).sort((a,b)=>a.up - b.up);
+    const right = arms.filter(a => a.side > 0).sort((a,b)=>b.up - a.up);
 
     ctx.beginPath();
-    // bottom-left
+
+    // bottom-left -> up left edge with rounded bulges
     ctx.moveTo(x0 - TW, yBase);
+    for (const a of left){
+      const ay   = yBase - HTRUNK * a.up;
+      const outX = x0 - TW - (12 + 14*a.w) * s;       // how far the arm sticks out
+      const tipY = ay - (18 + 20*a.h) * s;            // tip height
 
-    // up left edge with bulges
-    for(const a of left){
-      const ay   = yBase - HTRUNK*a.up;
-      const outX = x0 - TW - (12 + 14*a.w)*s;        // how far it sticks out
-      const tipY = ay - (18 + 20*a.h)*s;             // tip height
-
-      ctx.lineTo(x0 - TW, ay + R);
-      ctx.quadraticCurveTo(x0 - TW, ay, outX, ay - 5*s);
-      ctx.quadraticCurveTo(outX, tipY, x0 - TW, tipY);
-      ctx.quadraticCurveTo(x0 - TW, tipY, x0 - TW, ay - 2*s);
+      ctx.lineTo(x0 - TW, ay + CAPR);
+      ctx.quadraticCurveTo(x0 - TW, ay, outX, ay - 5*s);     // out
+      ctx.quadraticCurveTo(outX, tipY, x0 - TW, tipY);       // tip
+      ctx.quadraticCurveTo(x0 - TW, tipY, x0 - TW, ay - 2*s);// back to trunk
     }
 
     // top cap
-    ctx.lineTo(x0 - TW, yTop + R);
+    ctx.lineTo(x0 - TW, yTop + CAPR);
     ctx.quadraticCurveTo(x0 - TW, yTop, x0 + TW*lean, yTop);
-    ctx.quadraticCurveTo(x0 + TW*lean + TW, yTop, x0 + TW, yTop + R);
+    ctx.quadraticCurveTo(x0 + TW*lean + TW, yTop, x0 + TW, yTop + CAPR);
 
     // down right edge with bulges
-    for(const a of right){
-      const ay   = yBase - HTRUNK*a.up;
-      const outX = x0 + TW + (12 + 14*a.w)*s;
-      const tipY = ay - (18 + 20*a.h)*s;
+    for (const a of right){
+      const ay   = yBase - HTRUNK * a.up;
+      const outX = x0 + TW + (12 + 14*a.w) * s;
+      const tipY = ay - (18 + 20*a.h) * s;
 
       ctx.lineTo(x0 + TW, ay - 2*s);
-      ctx.quadraticCurveTo(x0 + TW, ay - 6*s, outX, tipY);
-      ctx.quadraticCurveTo(outX, ay - 2*s, x0 + TW, ay + 2*s);
+      ctx.quadraticCurveTo(x0 + TW, ay - 6*s, outX, tipY);   // out
+      ctx.quadraticCurveTo(outX, ay - 2*s, x0 + TW, ay + 2*s);// back
     }
 
-    // back to bottom-right and close
-    ctx.lineTo(x0 + TW, yBase - R);
+    // close the loop at the base
+    ctx.lineTo(x0 + TW, yBase - CAPR);
     ctx.quadraticCurveTo(x0 + TW, yBase, x0, yBase);
     ctx.closePath();
   }
 
+  // neon stroke: outer glow pass + inner "glass" pass
   function neonStroke(){
     ctx.save();
-    ctx.lineJoin='round';
-    ctx.lineCap='round';
+    ctx.lineJoin = 'round';
+    ctx.lineCap  = 'round';
 
-    // glow
-    ctx.shadowColor=OUTER;
-    ctx.shadowBlur=glowB;
-    ctx.strokeStyle=OUTE
+    // outer glow
+    ctx.shadowColor = OUTER;
+    ctx.shadowBlur  = glowB;
+    ctx.strokeStyle = OUTER;
+    ctx.lineWidth   = glowW;
+    ctx.stroke();
+
+    // inner glass
+    ctx.shadowBlur  = 0;
+    ctx.strokeStyle = INNER;
+    ctx.lineWidth   = glassW;
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // four silhouettes (more realistic saguaros)
+  // params: side (-1 left / +1 right), up (0..1), h (arm length 0..1), w (arm width 0..1)
+  let arms;
+  switch ((kind|0) % 4){
+    case 0: // classic: low-left, mid-right
+      arms = [
+        {side:-1, up:0.50, h:0.85, w:1.00},
+        {side:+1, up:0.64, h:0.95, w:1.05},
+      ];
+      break;
+    case 1: // both high (taller silhouette)
+      arms = [
+        {side:-1, up:0.76, h:0.75, w:0.95},
+        {side:+1, up:0.78, h:0.78, w:0.95},
+      ];
+      break;
+    case 2: // single low-left, tall trunk
+      arms = [
+        {side:-1, up:0.56, h:0.90, w:1.05},
+      ];
+      break;
+    default: // three-arm cluster
+      arms = [
+        {side:+1, up:0.60, h:0.98, w:1.10},
+        {side:+1, up:0.46, h:0.55, w:0.85},
+        {side:-1, up:0.70, h:0.62, w:0.85},
+      ];
+      break;
+  }
+
+  // draw outline
+  outlinePath(arms);
+  neonStroke();
+
+  // flowers: deterministic mapping (no per-frame randomness → no flicker)
+  // 0 -> 1 flower, 1 -> 2 flowers, others -> 0
+  const flowerCount = (kind % 4 === 1 ? 2 : (kind % 4 === 0 ? 1 : 0));
+  if (flowerCount){
+    const fx0 = x0 + (side < 0 ? -2 : 2) * s;
+    const fy0 = yTop + 6 * s;
+
+    ctx.save();
+    ctx.shadowColor = '#ff2e93';
+    ctx.shadowBlur  = Math.max(8, 12*s);
+    ctx.strokeStyle = '#ff2e93';
+    ctx.lineWidth   = Math.max(2.0, 2.8*s);
+
+    // fixed symmetric offsets → stable frame to frame
+    const OFF = 6*s;
+    const offs = (flowerCount === 2) ? [-OFF, +OFF] : [0];
+
+    for (const dx of offs){
+      ctx.beginPath();
+      // 5-petal star burst
+      for (let i=0;i<5;i++){
+        const a = i * (Math.PI*2/5);
+        ctx.moveTo(fx0 + dx + Math.cos(a)*4.2*s, fy0 + Math.sin(a)*4.2*s);
+        ctx.lineTo(fx0 + dx, fy0);
+      }
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+}
 
   // ---- health trail (fixed)
   const htrail=[];
