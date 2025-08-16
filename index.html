@@ -231,85 +231,118 @@ for (let i=0;i<6;i++){ spawnCactus(-1); spawnCactus(1); }
   // ---- palms
   function drawPalm(y,side){ if(y<horizonY-6||y>H+60) return; const e=roadEdgesAtY(y); const baseX=side<0?e.left-14:e.right+14; const t=clamp((y-horizonY)/(H-horizonY),0,1); const s=clamp(lerp(0.22,1.45,t),0.22,1.45); const trunkH=46*s, trunkW=6; const topX=baseX+(side<0?-6*s:6*s), topY=y-trunkH; ctx.fillStyle='#7a4a1a'; ctx.beginPath(); ctx.moveTo(baseX-trunkW/2,y); ctx.lineTo(baseX+trunkW/2,y); ctx.lineTo(topX+trunkW*0.35,topY); ctx.lineTo(topX-trunkW*0.35,topY); ctx.closePath(); ctx.fill(); const crownX=topX, crownY=topY; ctx.save(); ctx.lineCap='round'; ctx.lineJoin='round'; ctx.strokeStyle='#39ff14'; ctx.lineWidth=Math.max(1.6,2.0*s); const axisOut=(side<0?Math.PI:0)+(side<0?-0.12:0.12), axisIn=axisOut+Math.PI; const bankOut=[-0.80,-0.42,0.36], bankIn=[-0.70,-0.18,0.58]; const len0=30*s; function leaf(axis,off,idx){ const a=axis+off, L=len0*(0.92+0.15*Math.sin(idx*1.7)), spread=0.18*(1-Math.min(1,Math.abs(off)/1.1)), droop=(0.12+0.22*Math.max(0,off))*L; const tipX=crownX+Math.cos(a)*L, tipY=crownY+Math.sin(a)*L+droop; for(const k of [-1,1]){ const ae=a+k*spread, perp=ae+Math.PI/2; const c1x=crownX+Math.cos(ae)*L*0.45+Math.cos(perp)*L*0.12, c1y=crownY+Math.sin(ae)*L*0.45+Math.sin(perp)*L*0.12; const c2x=crownX+Math.cos(ae)*L*0.82-Math.cos(perp)*L*0.15, c2y=crownY+Math.sin(ae)*L*0.82-Math.sin(perp)*L*0.08+droop*0.6; ctx.beginPath(); ctx.moveTo(crownX,crownY); ctx.bezierCurveTo(c1x,c1y,c2x,c2y,tipX,tipY); ctx.stroke(); } }
     let idx=0; for(const o of bankOut) leaf(axisOut,o,idx++); for(const o of bankIn) leaf(axisIn,o,idx++); ctx.restore(); }
-// ---- cacti
+// ---- cacti (improved neon silhouettes)
 function drawCactus(y, side, kind){
-  // Cull when off-screen (small pad like palms)
   if (y < horizonY-6 || y > H+60) return;
 
-  // Push the cactus farther out than palms: palms use ±14; we use ±26
-  const e = roadEdgesAtY(y);
-  const baseX = side < 0 ? e.left - 26 : e.right + 26;
+  // Farther from road than palms
+  const edge = roadEdgesAtY(y);
+  const baseX = side < 0 ? edge.left - 28 : edge.right + 28;
 
-  // Perspective scale (a touch smaller than palms)
+  // Perspective scale
   const t = clamp((y - horizonY) / (H - horizonY), 0, 1);
-  const s = clamp(lerp(0.18, 1.20, t), 0.18, 1.20);
+  const s = clamp(lerp(0.20, 1.20, t), 0.20, 1.20);
 
-  // Neon line look
-  ctx.save();
-  ctx.lineCap = 'round';
-  ctx.lineJoin = 'round';
-  ctx.strokeStyle = '#39ff14';                 // same neon green family
-  ctx.shadowColor = '#39ff14';
-  ctx.shadowBlur = Math.max(1.4, 2.0*s);
-  ctx.lineWidth = Math.max(1.6, 2.0*s);
+  // Style (outer neon + inner glass)
+  const OUTER = '#39ff14';
+  const INNER = '#00f5ff66';
 
-  // Slight outward lean to echo palms
-  const lean = (side<0 ? -0.04 : 0.04);
+  // Dimensions (roughly match your photos when s=1)
+  const HTRUNK = 56*s;                 // trunk height
+  const TW     = 6*s;                  // trunk "tube" visual thickness reference
+  const ARM_L  = 22*s;                 // nominal arm length
+  const x0     = baseX;
+  const y0     = y;                    // base
+  const yTop   = y0 - HTRUNK;
 
-  // Normalize to base and draw variants
-  // Trunk ~ 40px at s=1; arms vary by "kind"
-  const trunkH = 40 * s, trunkW = 5 * s;
-  const x = baseX, y0 = y, topY = y0 - trunkH;
-
-  // Trunk
-  ctx.beginPath();
-  ctx.moveTo(x, y0);
-  ctx.lineTo(x + trunkW*lean, topY);
-  ctx.stroke();
-
-  // Arms (4 silhouettes; inspired by your neon refs)
-  function arm(dx, up, lengthMul, lift){
-    const ax = x + dx*s;
-    const armLen = trunkH * lengthMul;
-    const ay = y0 - trunkH*up + lift*s;
+  // Draw helper: stroke once with glow, then a thinner inner “glass” line
+  function neonStroke(drawPath){
+    // outer
+    ctx.save();
+    ctx.lineCap='round';
+    ctx.lineJoin='round';
+    ctx.shadowColor=OUTER;
+    ctx.shadowBlur=Math.max(10, 16*s);
+    ctx.strokeStyle=OUTER;
+    ctx.lineWidth=Math.max(3.2, 4.4*s);
     ctx.beginPath();
-    ctx.moveTo(ax, ay);
-    // gentle U with a rounded tip
-    ctx.bezierCurveTo(ax + (side<0?-6:6)*s, ay - 6*s, ax + (side<0?-6:6)*s, ay - 14*s, ax, ay - armLen);
-    ctx.bezierCurveTo(ax - (side<0?-6:6)*s, ay - 14*s, ax - (side<0?-6:6)*s, ay - 6*s, ax, ay);
+    drawPath(ctx);
     ctx.stroke();
+    // inner
+    ctx.shadowBlur=0;
+    ctx.strokeStyle=INNER;
+    ctx.lineWidth=Math.max(1.6, 2.2*s);
+    ctx.beginPath();
+    drawPath(ctx);
+    ctx.stroke();
+    ctx.restore();
   }
 
-  switch (kind|0){
-    case 0: // classic: one low left, one medium right
-      arm(-10, 0.45, 0.38,  2);
-      arm( 12, 0.60, 0.46, -2);
-      break;
-    case 1: // both arms high, asymmetrical
-      arm(-12, 0.70, 0.32, 0);
-      arm( 14, 0.74, 0.36,-2);
-      break;
-    case 2: // low left only (tall trunk feel)
-      arm(-11, 0.50, 0.40, 2);
-      break;
-    default: // three-arm vibe: two on one side, one tiny on the other
-      arm( 12, 0.60, 0.44, -2);
-      arm(  8, 0.45, 0.22,  0);
-      arm(-10, 0.68, 0.28,  0);
-      break;
+  // one arm: U-shape that rises, rounds, and comes back
+  // dx: horizontal offset from trunk, hStart: height ratio from base (0..1), len: length ratio (0..1)
+  // flip controls whether the arm opens outward depending on road side so silhouettes read well.
+  function drawArm(dx, hStart, len, lift, openRight){
+    const ax = x0 + dx*s;
+    const ay = y0 - HTRUNK*hStart + lift*s;
+    const tip = ay - ARM_L*len;
+    const bend = (openRight ? 10 : -10) * s;
+
+    neonStroke((p)=>{
+      p.moveTo(ax, ay);
+      p.bezierCurveTo(ax + bend, ay - 8*s, ax + bend, ay - 16*s, ax, tip);
+      p.bezierCurveTo(ax - bend, ay - 16*s, ax - bend, ay - 8*s, ax, ay);
+    });
   }
 
-  // Inner “glass” highlight line (faint cyan echo)
-  ctx.shadowBlur = 0;
-  ctx.lineWidth = Math.max(1.0, 1.4*s);
-  ctx.strokeStyle = '#00f5ff66';
-  // retrace trunk
-  ctx.beginPath(); ctx.moveTo(x, y0); ctx.lineTo(x + trunkW*lean, topY); ctx.stroke();
-  // small tip highlight
-  ctx.beginPath(); ctx.moveTo(x + trunkW*lean, topY + 6*s); ctx.lineTo(x + trunkW*lean, topY + 2*s); ctx.stroke();
+  // trunk with rounded top (slight lean outward like the signs)
+  const lean = (side<0 ? -0.05 : 0.05);
+  neonStroke((p)=>{
+    p.moveTo(x0, y0);
+    p.lineTo(x0 + TW*lean, yTop + 6*s);
+    // rounded cap
+    p.quadraticCurveTo(x0 + TW*lean, yTop - 2*s, x0 + TW*lean - 0.1*s, yTop + 6*s);
+  });
 
-  ctx.restore();
+  // Four silhouettes inspired by your photos:
+  // 0) classic two-arm; 1) both arms high + flower; 2) single low arm; 3) three-arm cluster
+  switch ((kind|0) % 4){
+    case 0: // Classic: left lower, right mid
+      drawArm(-12, 0.48, 0.42,  2, side>0);
+      drawArm( 14, 0.62, 0.50, -2, side>0);
+      break;
+
+    case 1: // Both arms high + flower crown
+      drawArm(-13, 0.72, 0.34, 0, side>0);
+      drawArm( 15, 0.76, 0.36,-2, side>0);
+      // simple neon flower at top
+      ctx.save();
+      ctx.shadowColor='#ff2e93';
+      ctx.shadowBlur=Math.max(8,12*s);
+      ctx.strokeStyle='#ff2e93';
+      ctx.lineWidth=Math.max(2.6,3.4*s);
+      ctx.beginPath();
+      const fx=x0+TW*lean, fy=yTop+4*s, fr=4.5*s;
+      for(let i=0;i<5;i++){
+        const a=i*(Math.PI*2/5);
+        ctx.moveTo(fx+Math.cos(a)*fr, fy+Math.sin(a)*fr);
+        ctx.lineTo(fx,fy);
+      }
+      ctx.stroke();
+      ctx.restore();
+      break;
+
+    case 2: // Tall with single arm (left) lower
+      drawArm(-12, 0.52, 0.44, 2, side>0);
+      break;
+
+    default: // Three-arm cluster: two on road-side, one small opposite
+      drawArm( 12, 0.60, 0.46,-2, side>0);
+      drawArm(  8, 0.46, 0.26, 0, side>0);
+      drawArm(-10, 0.70, 0.30, 0, side>0);
+      break;
+  }
 }
+
 
   // ---- health trail (fixed)
   const htrail=[];
