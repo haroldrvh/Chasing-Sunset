@@ -231,133 +231,85 @@ for (let i=0;i<6;i++){ spawnCactus(-1); spawnCactus(1); }
   // ---- palms
   function drawPalm(y,side){ if(y<horizonY-6||y>H+60) return; const e=roadEdgesAtY(y); const baseX=side<0?e.left-14:e.right+14; const t=clamp((y-horizonY)/(H-horizonY),0,1); const s=clamp(lerp(0.22,1.45,t),0.22,1.45); const trunkH=46*s, trunkW=6; const topX=baseX+(side<0?-6*s:6*s), topY=y-trunkH; ctx.fillStyle='#7a4a1a'; ctx.beginPath(); ctx.moveTo(baseX-trunkW/2,y); ctx.lineTo(baseX+trunkW/2,y); ctx.lineTo(topX+trunkW*0.35,topY); ctx.lineTo(topX-trunkW*0.35,topY); ctx.closePath(); ctx.fill(); const crownX=topX, crownY=topY; ctx.save(); ctx.lineCap='round'; ctx.lineJoin='round'; ctx.strokeStyle='#39ff14'; ctx.lineWidth=Math.max(1.6,2.0*s); const axisOut=(side<0?Math.PI:0)+(side<0?-0.12:0.12), axisIn=axisOut+Math.PI; const bankOut=[-0.80,-0.42,0.36], bankIn=[-0.70,-0.18,0.58]; const len0=30*s; function leaf(axis,off,idx){ const a=axis+off, L=len0*(0.92+0.15*Math.sin(idx*1.7)), spread=0.18*(1-Math.min(1,Math.abs(off)/1.1)), droop=(0.12+0.22*Math.max(0,off))*L; const tipX=crownX+Math.cos(a)*L, tipY=crownY+Math.sin(a)*L+droop; for(const k of [-1,1]){ const ae=a+k*spread, perp=ae+Math.PI/2; const c1x=crownX+Math.cos(ae)*L*0.45+Math.cos(perp)*L*0.12, c1y=crownY+Math.sin(ae)*L*0.45+Math.sin(perp)*L*0.12; const c2x=crownX+Math.cos(ae)*L*0.82-Math.cos(perp)*L*0.15, c2y=crownY+Math.sin(ae)*L*0.82-Math.sin(perp)*L*0.08+droop*0.6; ctx.beginPath(); ctx.moveTo(crownX,crownY); ctx.bezierCurveTo(c1x,c1y,c2x,c2y,tipX,tipY); ctx.stroke(); } }
     let idx=0; for(const o of bankOut) leaf(axisOut,o,idx++); for(const o of bankIn) leaf(axisIn,o,idx++); ctx.restore(); }
-// ---- cacti (closed-outline neon, 4 silhouettes, pushed farther out)
+// ---- cacti (closed-outline neon, anti-flicker flowers, farther & smaller)
 function drawCactus(y, side, kind){
   if (y < horizonY-6 || y > H+60) return;
 
-  // Place farther from road than palms
-  const e   = roadEdgesAtY(y);
-  const x0  = side < 0 ? e.left - 40 : e.right + 40;   // ← bumped from 28 to 40
+  // --- placement: 3x farther from road than previous (40 -> 120)
+  const CACTUS_OFFSET = 120;
+  const edge = roadEdgesAtY(y);
+  const x0   = side < 0 ? edge.left - CACTUS_OFFSET : edge.right + CACTUS_OFFSET;
 
-  // Perspective
-  const t = clamp((y - horizonY) / (H - horizonY), 0, 1);
-  const s = clamp(lerp(0.20, 1.20, t), 0.20, 1.20);
+  // --- perspective scale then halve size globally
+  const t  = clamp((y - horizonY) / (H - horizonY), 0, 1);
+  const s0 = clamp(lerp(0.20, 1.20, t), 0.20, 1.20);
+  const s  = s0 * 0.5; // half-size
 
-  // Style: neon outer + inner "glass"
+  // --- neon style
   const OUTER = '#39ff14', INNER = '#00f5ff66';
+  const glowW = Math.max(3.0, 4.2*s);
+  const glassW= Math.max(1.4, 2.0*s);
+  const glowB = Math.max(10, 16*s);
 
-  const HTRUNK = 60*s;         
-  const R      = 7.5*s;        
-  const lean   = (side<0 ? -0.04 : 0.04); 
+  // --- proportions tuned for classic saguaro look
+  const HTRUNK = 62*s;     // trunk height
+  const TW     = 8*s;      // trunk half "tube" width
+  const R      = 7*s;      // corner radius
+  const lean   = (side<0 ? -0.04 : 0.04);
   const yBase  = y, yTop = yBase - HTRUNK;
 
+  // build a single CLOSED outline around trunk + arms
   function outlinePath(arms){
-    const ctxp = ctx;
-    const leftArms  = arms.filter(a=>a.side<0).sort((a,b)=>a.up-b.up);
-    const rightArms = arms.filter(a=>a.side>0).sort((a,b)=>b.up-a.up);
-    const TW = 8*s;
+    const left  = arms.filter(a=>a.side<0).sort((a,b)=>a.up-b.up);
+    const right = arms.filter(a=>a.side>0).sort((a,b)=>b.up-a.up);
 
-    ctxp.beginPath();
-    ctxp.moveTo(x0 - TW, yBase);
+    ctx.beginPath();
+    // bottom-left
+    ctx.moveTo(x0 - TW, yBase);
 
-    let prevY = yBase;
-    for(const a of leftArms){
-      const ay = yBase - HTRUNK*a.up;
-      ctxp.lineTo(x0 - TW, ay + R);
-      const outX = x0 - TW - (12 + 14*a.w)*s;     
-      const tipY = ay - (16 + 18*a.h)*s;          
-      ctxp.quadraticCurveTo(x0 - TW, ay, outX, ay - 4*s);
-      ctxp.quadraticCurveTo(outX, tipY, x0 - TW, tipY);
-      ctxp.quadraticCurveTo(x0 - TW, tipY, x0 - TW, ay - 2*s);
-      prevY = ay - 2*s;
+    // up left edge with bulges
+    for(const a of left){
+      const ay   = yBase - HTRUNK*a.up;
+      const outX = x0 - TW - (12 + 14*a.w)*s;        // how far it sticks out
+      const tipY = ay - (18 + 20*a.h)*s;             // tip height
+
+      ctx.lineTo(x0 - TW, ay + R);
+      ctx.quadraticCurveTo(x0 - TW, ay, outX, ay - 5*s);
+      ctx.quadraticCurveTo(outX, tipY, x0 - TW, tipY);
+      ctx.quadraticCurveTo(x0 - TW, tipY, x0 - TW, ay - 2*s);
     }
-    ctxp.lineTo(x0 - TW, yTop + R);
-    ctxp.quadraticCurveTo(x0 - TW, yTop, x0 + TW*lean, yTop);
-    ctxp.quadraticCurveTo(x0 + TW*lean + TW, yTop, x0 + TW, yTop + R);
-    prevY = yTop + R;
-    for(const a of rightArms){
-      const ay = yBase - HTRUNK*a.up;
-      ctxp.lineTo(x0 + TW, ay - 2*s);
+
+    // top cap
+    ctx.lineTo(x0 - TW, yTop + R);
+    ctx.quadraticCurveTo(x0 - TW, yTop, x0 + TW*lean, yTop);
+    ctx.quadraticCurveTo(x0 + TW*lean + TW, yTop, x0 + TW, yTop + R);
+
+    // down right edge with bulges
+    for(const a of right){
+      const ay   = yBase - HTRUNK*a.up;
       const outX = x0 + TW + (12 + 14*a.w)*s;
-      const tipY = ay - (16 + 18*a.h)*s;
-      ctxp.quadraticCurveTo(x0 + TW, ay - 6*s, outX, tipY);
-      ctxp.quadraticCurveTo(outX, ay - 2*s, x0 + TW, ay + 2*s);
-      prevY = ay + 2*s;
+      const tipY = ay - (18 + 20*a.h)*s;
+
+      ctx.lineTo(x0 + TW, ay - 2*s);
+      ctx.quadraticCurveTo(x0 + TW, ay - 6*s, outX, tipY);
+      ctx.quadraticCurveTo(outX, ay - 2*s, x0 + TW, ay + 2*s);
     }
-    ctxp.lineTo(x0 + TW, yBase - R);
-    ctxp.quadraticCurveTo(x0 + TW, yBase, x0, yBase);
-    ctxp.closePath();
+
+    // back to bottom-right and close
+    ctx.lineTo(x0 + TW, yBase - R);
+    ctx.quadraticCurveTo(x0 + TW, yBase, x0, yBase);
+    ctx.closePath();
   }
 
   function neonStroke(){
     ctx.save();
     ctx.lineJoin='round';
     ctx.lineCap='round';
+
+    // glow
     ctx.shadowColor=OUTER;
-    ctx.shadowBlur=Math.max(12,18*s);
-    ctx.strokeStyle=OUTER;
-    ctx.lineWidth=Math.max(3.2,4.6*s);
-    ctx.stroke();
-    ctx.shadowBlur=0;
-    ctx.strokeStyle=INNER;
-    ctx.lineWidth=Math.max(1.6,2.2*s);
-    ctx.stroke();
-    ctx.restore();
-  }
-
-  let arms;
-  switch ((kind|0)%4){
-    case 0:
-      arms=[
-        {side:-1, up:0.53, h:0.8, w:0.9},
-        {side:+1, up:0.66, h:0.9, w:1.0},
-      ];
-      break;
-    case 1:
-      arms=[
-        {side:-1, up:0.74, h:0.7, w:0.9},
-        {side:+1, up:0.77, h:0.75,w:0.9},
-      ];
-      break;
-    case 2:
-      arms=[
-        {side:-1, up:0.55, h:0.85,w:1.0},
-      ];
-      break;
-    default:
-      arms=[
-        {side:+1, up:0.60, h:0.95,w:1.0},
-        {side:+1, up:0.46, h:0.55,w:0.8},
-        {side:-1, up:0.70, h:0.60,w:0.8},
-      ];
-      break;
-  }
-
-  outlinePath(arms);
-  neonStroke();
-
-  const flowers = (Math.random()<0.5?1:0) + (Math.random()<0.25?1:0);
-  if (flowers){
-    const fx = x0 + (side<0?-2:2)*s + (Math.random()*2-1)*2*s;
-    const fy = yTop + 6*s;
-    ctx.save();
-    ctx.shadowColor='#ff2e93';
-    ctx.shadowBlur=Math.max(8,12*s);
-    ctx.strokeStyle='#ff2e93';
-    ctx.lineWidth=Math.max(2.2,3.0*s);
-    for(let k=0;k<flowers;k++){
-      const offx = (k===0?0:(k===1?6*s:-6*s));
-      ctx.beginPath();
-      for(let i=0;i<5;i++){
-        const a=i*(Math.PI*2/5);
-        ctx.moveTo(fx+offx+Math.cos(a)*4.5*s, fy+Math.sin(a)*4.5*s);
-        ctx.lineTo(fx+offx, fy);
-      }
-      ctx.stroke();
-    }
-    ctx.restore();
-  }
-}
+    ctx.shadowBlur=glowB;
+    ctx.strokeStyle=OUTE
 
   // ---- health trail (fixed)
   const htrail=[];
