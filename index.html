@@ -2,7 +2,10 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="theme-color" content="#0a0014" />
 <title>Chasing Sunset — Core</title>
 <style>
   :root{ --hot-pink:#ff2e93; --cyan:#00f5ff; --acid:#39ff14; --ink:#0e0b2b; }
@@ -247,7 +250,12 @@ ctx.restore(); }
   window.addEventListener('resize',fit); fit();
   // start button wiring
   const startBtn=document.getElementById('startBtn'), startOv=document.getElementById('startOverlay');
-  if(startBtn&&startOv){ startBtn.addEventListener('click',()=>{ state.started=true; startOv.style.display='none'; }); }
+  if(startBtn&&startOv){ startBtn.addEventListener('click',()=>{ 
+    // try to enter fullscreen on first user gesture (mobile-friendly)
+    const el=document.documentElement; const req=el.requestFullscreen||el.webkitRequestFullscreen||el.msRequestFullscreen; 
+    try{ req && req.call(el); }catch(e){}
+    state.started=true; startOv.style.display='none'; 
+  }); }
 
   // ---- HEALTH FEATURE (minimal block appended)
   function spawnHealth(){
