@@ -185,11 +185,17 @@ function currentSpeed(){
   function addHighScore(d){ const v=Math.max(0,Math.floor(d)); state.highScores.push(v); state.highScores.sort((a,b)=>b-a); if(state.highScores.length>3) state.highScores.length=3; }
 
   // ---- HUDs
+  // Raise both HUD boxes by this many pixels (bigger = higher, capped at 8px from top)
+const HUD_OFFSET_Y = 10;
+
   function drawCanvasHUD(){
     const dist=Math.floor(state.distance), heartsTotal=4, heartsLeft=clamp(state.lives,0,heartsTotal);
     ctx.save(); ctx.font='bold 14px monospace'; ctx.textAlign='left'; ctx.textBaseline='top';
     const padding=6, lineH=18, boxW=Math.floor(180*0.7), boxH=lineH*3+padding*2, x=W-boxW-8;
-    let y=8; if(titleBox) y=Math.max(y, Math.round(titleBox.top+titleBox.height+12)); y=clamp(y,8,H-boxH-8);
+    let y = 8;
+if (titleBox) y = Math.max(y, Math.round(titleBox.top + titleBox.height + 12));
+y = clamp(y - HUD_OFFSET_Y, 8, H - boxH - 8);
+
     function heart(hx_,hy_,s,filled){ ctx.save(); if(filled){ ctx.shadowColor='#ff2e93'; ctx.shadowBlur=6; }
       ctx.beginPath(); ctx.moveTo(hx_,hy_+s*0.6*1.2); ctx.bezierCurveTo(hx_-s*1.2,hy_+s*0.2*1.2,hx_-s*1.2,hy_-s*0.6*1.2,hx_,hy_-s*0.1*1.2); ctx.bezierCurveTo(hx_+s*1.2,hy_-s*0.6*1.2,hx_+s*1.2,hy_+s*0.2*1.2,hx_,hy_+s*0.6*1.2);
       if(filled){ const gr=ctx.createLinearGradient(0,hy_-s*1.2,0,hy_+s*1.2); gr.addColorStop(0,'#ff9ac5'); gr.addColorStop(1,'#ff2e93'); ctx.fillStyle=gr; ctx.fill(); }
@@ -205,13 +211,19 @@ function currentSpeed(){
     });
     ctx.restore();
   }
+  // Raise both HUD boxes by this many pixels (bigger = higher, capped at 8px from top)
+const HUD_OFFSET_Y = 10;
+
   function drawHighScoresHUD(){
     ctx.save(); ctx.font='bold 14px monospace'; ctx.textAlign='left'; ctx.textBaseline='top';
     const padding=6, lineH=18, x=8;
     const headerW = ctx.measureText('High Scores').width;
     const boxH = lineH*4 + padding*2;
     const boxW = Math.ceil(headerW + padding*2 + 8);
-    let y=8; if(titleBox) y=Math.max(y, Math.round(titleBox.top+titleBox.height+12)); y=clamp(y,8,H-boxH-8);
+    let y = 8;
+if (titleBox) y = Math.max(y, Math.round(titleBox.top + titleBox.height + 12));
+y = clamp(y - HUD_OFFSET_Y, 8, H - boxH - 8);
+
     panel(x,y,boxW,boxH,(px,py)=>{
       const tx=px+padding, ty=py+padding; ctx.fillStyle='#ffffff';
       ctx.fillText('High Scores',tx,ty);
