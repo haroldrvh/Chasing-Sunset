@@ -251,9 +251,11 @@ ctx.restore(); }
   // start button wiring
   const startBtn=document.getElementById('startBtn'), startOv=document.getElementById('startOverlay');
   if(startBtn&&startOv){ startBtn.addEventListener('click',()=>{ 
-    // try to enter fullscreen on first user gesture (mobile-friendly)
+    // enter fullscreen only on mobile + if allowed by Permissions Policy / browser support
     const el=document.documentElement; const req=el.requestFullscreen||el.webkitRequestFullscreen||el.msRequestFullscreen; 
-    try{ req && req.call(el); }catch(e){}
+    const allowed=!!(document.fullscreenEnabled||document.webkitFullscreenEnabled||document.msFullscreenEnabled);
+    const isMobile=(/Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) || (window.matchMedia && matchMedia('(pointer:coarse)').matches && Math.max(screen.width,screen.height)<1200);
+    if(isMobile && req && allowed){ try{ const p=req.call(el); if(p && typeof p.catch==='function') p.catch(()=>{}); }catch(e){} }
     state.started=true; startOv.style.display='none'; 
   }); }
 
