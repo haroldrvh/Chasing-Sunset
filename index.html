@@ -272,16 +272,29 @@
       const bp=document.getElementById('btnPlay');
       const bm=document.getElementById('btnMute');
       const startBtn=document.getElementById('startBtn');
-      if(!(bgm && bp && bm)) return;
-      bgm.volume=0.45;
-      const savedMute=localStorage.getItem('lean_mute');
-      if(savedMute!==null) bgm.muted = savedMute==='1';
-      function sync(){ try{ bp.textContent=bgm.paused?'▶':'⏸'; bm.textContent=bgm.muted?'🔈':'🔇'; }catch(e){} }
-      if(startBtn){ startBtn.addEventListener('click',()=>{ bgm.play().then(sync).catch(()=>{}); }); }
-      bp.addEventListener('click',()=>{ if(bgm.paused) bgm.play().catch(()=>{}); else bgm.pause(); sync(); });
-      bm.addEventListener('click',()=>{ bgm.muted=!bgm.muted; localStorage.setItem('lean_mute', bgm.muted?'1':'0'); sync(); });
-      document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible' && !bgm.paused) bgm.play().catch(()=>{}); });
-      sync();
+      // Music wiring (safe even if some elements are missing)
+      if(bgm){
+        bgm.volume=0.45;
+        const savedMute=localStorage.getItem('lean_mute');
+        if(savedMute!==null) bgm.muted = savedMute==='1';
+        function sync(){ try{ if(bp) bp.textContent=bgm.paused?'▶':'⏸'; if(bm) bm.textContent=bgm.muted?'🔈':'🔇'; }catch(e){} }
+        if(startBtn){ startBtn.addEventListener('click',()=>{ bgm.play().then(sync).catch(()=>{}); }); }
+        if(bp){ bp.addEventListener('click',()=>{ if(bgm.paused) bgm.play().catch(()=>{}); else bgm.pause(); sync(); }); }
+        if(bm){ bm.addEventListener('click',()=>{ bgm.muted=!bgm.muted; localStorage.setItem('lean_mute', bgm.muted?'1':'0'); sync(); }); }
+        document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible' && !bgm.paused) bgm.play().catch(()=>{}); });
+        sync();
+      }
+
+      // Cat SFX mute button
+      const sfx=document.getElementById('sfx_meow');
+      const bs=document.getElementById('btnSfx');
+      function syncSfx(){ try{ if(bs && sfx) bs.textContent = sfx.muted ? '🙀' : '🐱'; }catch(e){} }
+      if(sfx){
+        const savedSfx=localStorage.getItem('lean_sfx_mute');
+        if(savedSfx!==null) sfx.muted = savedSfx==='1';
+        if(bs){ bs.addEventListener('click',()=>{ sfx.muted=!sfx.muted; localStorage.setItem('lean_sfx_mute', sfx.muted?'1':'0'); syncSfx(); }); }
+        syncSfx();
+      }
     }
     if(document.readyState==='loading') window.addEventListener('DOMContentLoaded', init); else init();
   })();
@@ -333,6 +346,7 @@
 <div id="musicControls">
   <button id="btnPlay">▶</button>
   <button id="btnMute">🔇</button>
+  <button id="btnSfx" title="Toggle cat meow">🐱</button>
 </div>
 <audio id="bgm" preload="auto" loop src="music.mp3" crossorigin="anonymous"></audio>
 <audio id="sfx_meow" preload="auto" src="meow.mp3" crossorigin="anonymous"></audio>
