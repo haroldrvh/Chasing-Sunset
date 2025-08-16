@@ -197,7 +197,7 @@ function currentSpeed(){
     panel(x,y,boxW,boxH,(px,py,pw,ph)=>{
       const tx=px+padding, ty=py+padding; ctx.fillStyle='#ffffff';
       ctx.fillText('Distance: '+dist,tx,ty); ctx.fillText('Life:',tx,ty+lineH);
-      const heartSize=7.5; let hx=tx+44, hy=ty+lineH+4; for(let i=0;i<heartsTotal;i++) heart(hx+i*(heartSize*2.2),hy,heartSize,i<heartsLeft);
+      const heartSize=7.5; let hx=tx+60, hy=ty+lineH+4; for(let i=0;i<heartsTotal;i++) heart(hx+i*(heartSize*2.2),hy,heartSize,i<heartsLeft);
       ctx.fillText('Lean:', tx, ty + lineH*2);
       const innerW = boxW - padding*2; const barW = Math.floor(innerW * 0.65); const barH = 6; const barY = ty + lineH*2 + 4; const barX = tx + innerW - barW;
       ctx.fillStyle='#00000066'; ctx.fillRect(barX,barY,barW,barH);
