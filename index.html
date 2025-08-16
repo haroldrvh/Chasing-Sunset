@@ -221,7 +221,9 @@ ctx.restore(); }
     if(!state.gameOver && state.time>=nextHeal) spawnHealth(); if(!state.gameOver && state.time>=nextSpawn) spawnObstacle(); const moving=(state.gameOver||state.time<state.stopUntil)?0:state.normalSpeed*SPEED_SCALE; palms.forEach(p=>{ p.y+=moving*dt*0.8; if(p.y>H+64) p.y=-Math.random()*H; }); obstacles.forEach(o=>{ if(o.flying){ o.vy=(o.vy??0)+(o.gravity??220)*dt; o.fx+=(o.vx??0)*dt; o.fy+=(o.vy??0)*dt; if(o.rvel) o.rot=(o.rot||0)+o.rvel*dt; if(o.fs) o.fs*=0.995; } else { const t=clamp((o.y-horizonY)/(H-horizonY),0,1); const early=t<0.5?(0.4+1.2*t):1.0; o.y+=moving*dt*obstacleSpeedFactor*early; } }); healths.forEach(h=>{ const t=clamp((h.y-horizonY)/(H-horizonY),0,1); const early=t<0.5?(0.4+1.2*t):1.0; h.y+=moving*dt*obstacleSpeedFactor*early; h.smokeAcc=(h.smokeAcc||0)+dt*18; while(h.smokeAcc>=1){ spawnHealthTrailFrom(h); h.smokeAcc-=1; } });
     // collect health pickups
     for(let i=healths.length-1;i>=0;i--){ const h=healths[i]; if(collide(h)){ state.health=clamp(state.health+HEALTH_REPLENISH,0,1); healths.splice(i,1);} }
-    state.distance+=moving*dt/10; if(moving>0){ for(const o of obstacles){ if(!o.passed && collide(o)){ o.passed=true; state.hits++; if(state.lives>0) state.lives--; if(state.lives<=0 && !state.gameOver){ const yHit=o.y, xHit=laneXAtY(o.lane,yHit); const tScale=clamp((yHit-horizonY)/(H-horizonY),0,1); const sScale=clamp(lerp(0.25,1.1,tScale),0.25,1.1); o.flying=true; o.fx=xHit; o.fy=yHit; o.fs=sScale; o.rot=0; o.vx=(Math.random()<0.5?-1:1)*(160+Math.random()*140); o.vy=-(140+Math.random()*180); o.rvel=(Math.random()*2-1)*6; o.gravity=300; spawnPoof(xHit,yHit,sScale); state.deathReason='life'; addHighScore(state.distance); state.gameOver=true; state.restartAt = state.time+4.0; state.stopUntil=0; } else { const yHit=o.y, xHit=laneXAtY(o.lane,yHit); const tScale=clamp((yHit-horizonY)/(H-horizonY),0,1); const sScale=clamp(lerp(0.25,1.1,tScale),0.25,1.1); o.flying=true; o.fx=xHit; o.fy=yHit; o.fs=sScale; o.rot=0; o.vx=(Math.random()<0.5?-1:1)*(140+Math.random()*120); o.vy=-(120+Math.random()*160); o.rvel=(Math.random()*2-1)*6; o.gravity=300; spawnPoof(xHit,yHit,sScale); state.stopUntil=state.time+2.0; } break; } } }
+    state.distance+=moving*dt/10; if(moving>0){ for(const o of obstacles){ if(!o.passed && collide(o)){ o.passed=true; state.hits++; if(state.lives>0) state.lives--;
+        // play meow sfx on cat hit (minimal)
+        try{ const a=document.getElementById('sfx_meow'); if(a){ a.currentTime=0; a.play().catch(()=>{}); } }catch{} if(state.lives<=0 && !state.gameOver){ const yHit=o.y, xHit=laneXAtY(o.lane,yHit); const tScale=clamp((yHit-horizonY)/(H-horizonY),0,1); const sScale=clamp(lerp(0.25,1.1,tScale),0.25,1.1); o.flying=true; o.fx=xHit; o.fy=yHit; o.fs=sScale; o.rot=0; o.vx=(Math.random()<0.5?-1:1)*(160+Math.random()*140); o.vy=-(140+Math.random()*180); o.rvel=(Math.random()*2-1)*6; o.gravity=300; spawnPoof(xHit,yHit,sScale); state.deathReason='life'; addHighScore(state.distance); state.gameOver=true; state.restartAt = state.time+4.0; state.stopUntil=0; } else { const yHit=o.y, xHit=laneXAtY(o.lane,yHit); const tScale=clamp((yHit-horizonY)/(H-horizonY),0,1); const sScale=clamp(lerp(0.25,1.1,tScale),0.25,1.1); o.flying=true; o.fx=xHit; o.fy=yHit; o.fs=sScale; o.rot=0; o.vx=(Math.random()<0.5?-1:1)*(140+Math.random()*120); o.vy=-(120+Math.random()*160); o.rvel=(Math.random()*2-1)*6; o.gravity=300; spawnPoof(xHit,yHit,sScale); state.stopUntil=state.time+2.0; } break; } } }
     for(let i=obstacles.length-1;i>=0;i--){ const o=obstacles[i]; if(o.flying){ if(o.fx<-64||o.fx>W+64||o.fy<-64||o.fy>H+64) obstacles.splice(i,1); } else if(o.y>H+64) obstacles.splice(i,1); }
     // prune health pickups off-screen
     for(let i=healths.length-1;i>=0;i--){ if(healths[i].y>H+64) healths.splice(i,1); }
@@ -399,14 +401,16 @@ ctx.restore(); }
   <button id="btnMute">🔇</button>
 </div>
 <audio id="bgm" preload="auto" loop src="music.mp3" crossorigin="anonymous"></audio>
+<audio id="sfx_meow" preload="auto" src="meow.mp3" crossorigin="anonymous"></audio>
 
 <script>
-(()=>{const el=document.getElementById('bgm'),bp=document.getElementById('btnPlay'),bm=document.getElementById('btnMute');if(!el||!bp||!bm)return;
+(()=>{const el=document.getElementById('bgm'),bp=document.getElementById('btnPlay'),bm=document.getElementById('btnMute'),sfx=document.getElementById('sfx_meow');if(!el||!bp||!bm)return;
 el.volume=.45;
-try{ const m=localStorage.getItem('game1_bgm_muted'); el.muted = (m==='1'); }catch{ el.muted=false; }function sync(){try{const st=el.paused?'paused':'playing';bp.textContent=el.paused?'▶':'⏸';bm.textContent=el.muted?'🔈':'🔇'}catch{}}
-function start(){el.play().then(sync).catch(()=>{});} addEventListener('pointerdown',start,{once:true});addEventListener('keydown',start,{once:true});
+try{ const m=localStorage.getItem('game1_bgm_muted'); el.muted = (m==='1'); }catch{ el.muted=false; } if(sfx) sfx.muted = el.muted; function sync(){
+try{const st=el.paused?'paused':'playing';bp.textContent=el.paused?'▶':'⏸';bm.textContent=el.muted?'🔈':'🔇'}catch{}}
+function start(){ el.play().then(sync).catch(()=>{}); try{ if(sfx){ sfx.play().then(()=>{ sfx.pause(); sfx.currentTime=0; }).catch(()=>{}); } }catch{} } addEventListener('pointerdown',start,{once:true});addEventListener('keydown',start,{once:true});
 bp.addEventListener('click',()=>{if(el.paused)el.play().catch(()=>{});else el.pause();sync()});
-bm.addEventListener('click',()=>{ el.muted=!el.muted; try{ localStorage.setItem('game1_bgm_muted', el.muted?'1':'0'); }catch{} sync(); });
+bm.addEventListener('click',()=>{ el.muted=!el.muted; if(sfx) sfx.muted=el.muted; try{ localStorage.setItem('game1_bgm_muted', el.muted?'1':'0'); }catch{} sync(); });
 addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&!el.paused)el.play().catch(()=>{})});
 sync();
 })();
