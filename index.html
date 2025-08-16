@@ -207,7 +207,7 @@ function currentSpeed(){
   }
   function drawHighScoresHUD(){
     ctx.save(); ctx.font='bold 14px monospace'; ctx.textAlign='left'; ctx.textBaseline='top';
-    const padding=6, lineH=18, x=8;
+    const padding=6, lineH=14, x=8;
     const headerW = ctx.measureText('High Scores').width;
     const boxH = lineH*4 + padding*2 - 6;
     const boxW = Math.ceil(headerW + padding*2 + 8);
