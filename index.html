@@ -209,7 +209,7 @@ function currentSpeed(){
     ctx.save(); ctx.font='bold 14px monospace'; ctx.textAlign='left'; ctx.textBaseline='top';
     const padding=6, lineH=14, x=8;
     const headerW = ctx.measureText('High Scores').width;
-    const boxH = lineH*4 + padding*2;
+    const boxH = lineH*4 + padding*2 - 1;
     const boxW = Math.ceil(headerW + padding*2 + 8);
     let y=8; if(titleBox) y=Math.max(y, Math.round(titleBox.top+titleBox.height+12)); y=clamp(y-13,8,H-boxH-8);
     panel(x,y,boxW,boxH,(px,py)=>{
