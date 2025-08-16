@@ -156,7 +156,7 @@ nextSpawn   = state.time + min + Math.random() * range;
     let shell=ctx.createLinearGradient(0,-h*0.55,0,h*0.40); shell.addColorStop(0,'#ffffff'); shell.addColorStop(1,'#cfd6e0'); ctx.fillStyle=shell; ctx.beginPath(); ctx.moveTo(-w*0.62,h*0.36); ctx.lineTo(w*0.62,h*0.36); ctx.lineTo(w*0.66,h*0.08); ctx.lineTo(w*0.54,-h*0.06); ctx.lineTo(w*0.48,-h*0.18); ctx.lineTo(-w*0.48,-h*0.18); ctx.lineTo(-w*0.54,-h*0.06); ctx.lineTo(-w*0.66,h*0.08); ctx.closePath(); ctx.fill(); ctx.strokeStyle='#4a5260'; ctx.lineWidth=1.5; ctx.stroke();
     let glass=ctx.createLinearGradient(0,-h*0.22,0,h*0.05); glass.addColorStop(0,'#0b1220'); glass.addColorStop(1,'#1c2a3a'); ctx.fillStyle=glass; const rw=w*0.82, rh=h*0.36; ctx.fillRect(-rw/2,-h*0.20,rw,rh);
     if(brakeOn){
-  const hbW=w*0.26, hbH=Math.max(3,h*0.02), hbY=-h*0.26; // keep or use your aligned hbY
+  const hbW=w*0.26, hbH=Math.max(3,h*0.02), hbY=-h*0.20;
   const hbGrad=ctx.createLinearGradient(0,hbY-hbH,0,hbY+hbH);
   hbGrad.addColorStop(0,'#fff3f7');  // brighter top
   hbGrad.addColorStop(1,'#ff2048');  // hotter red base
