@@ -34,12 +34,6 @@
   // ---- state
   const state={ time:0, normalSpeed:120, stopUntil:0, distance:0, hits:0, lives:4, gameOver:false, restartAt:0, highScores:[], started:false, paused:false, deathReason:null };
   const obstacleSpeedFactor=0.88;
-// ---- dynamic speed scaling
-function currentSpeed(){
-  // Every 200m, scale speed +10%
-  const steps = Math.floor((state.distance||0) / 200);
-  return currentSpeed() * Math.pow(1.1, steps);
-}
 
   // health
   state.health=1;                      // 0..1
@@ -241,14 +235,14 @@ function currentSpeed(){
   // ---- update
   function update(dt){ state.time+=dt; if(state.time<state.stopUntil){ if(nextSpawn<state.stopUntil) nextSpawn=state.stopUntil; if(nextHeal<state.stopUntil) nextHeal=state.stopUntil; } updateSmoke(dt); updatePoofs(dt); updateHealthTrail(dt); updateCarSmoke(dt);
     state.health=clamp((state.health??1)-dt/10,0,1); if(state.health<=0 && !state.gameOver){ state.deathReason='health'; addHighScore(state.distance); state.gameOver=true; state.restartAt = state.time+4.0; state.stopUntil=0; }
-    if(!state.gameOver && state.time>=nextHeal) spawnHealth(); if(!state.gameOver && state.time>=nextSpawn) spawnObstacle(); const moving=(state.gameOver||state.time<state.stopUntil)?0:currentSpeed()*SPEED_SCALE; palms.forEach(p=>{ p.y+=moving*dt*0.8; if(p.y>H+64) p.y=-Math.random()*H; }); obstacles.forEach(o=>{ if(o.flying){ o.vy=(o.vy??0)+(o.gravity??220)*dt; o.fx+=(o.vx??0)*dt; o.fy+=(o.vy??0)*dt; if(o.rvel) o.rot=(o.rot||0)+o.rvel*dt; if(o.fs) o.fs*=0.995; } else { o.y = forwardStep(o.y, dt, moving); } }); healths.forEach(h=>{ h.y = forwardStep(h.y, dt, moving); h.smokeAcc=(h.smokeAcc||0)+dt*18; while(h.smokeAcc>=1){ spawnHealthTrailFrom(h); h.smokeAcc-=1; } }); for(let i=healths.length-1;i>=0;i--){ const h=healths[i]; if(collide(h)){ state.health=clamp(state.health+HEALTH_REPLENISH,0,1); carSmokeEmitUntil = state.time + 1.0; healths.splice(i,1);} }
+    if(!state.gameOver && state.time>=nextHeal) spawnHealth(); if(!state.gameOver && state.time>=nextSpawn) spawnObstacle(); const moving=(state.gameOver||state.time<state.stopUntil)?0:state.normalSpeed*SPEED_SCALE; palms.forEach(p=>{ p.y+=moving*dt*0.8; if(p.y>H+64) p.y=-Math.random()*H; }); obstacles.forEach(o=>{ if(o.flying){ o.vy=(o.vy??0)+(o.gravity??220)*dt; o.fx+=(o.vx??0)*dt; o.fy+=(o.vy??0)*dt; if(o.rvel) o.rot=(o.rot||0)+o.rvel*dt; if(o.fs) o.fs*=0.995; } else { o.y = forwardStep(o.y, dt, moving); } }); healths.forEach(h=>{ h.y = forwardStep(h.y, dt, moving); h.smokeAcc=(h.smokeAcc||0)+dt*18; while(h.smokeAcc>=1){ spawnHealthTrailFrom(h); h.smokeAcc-=1; } }); for(let i=healths.length-1;i>=0;i--){ const h=healths[i]; if(collide(h)){ state.health=clamp(state.health+HEALTH_REPLENISH,0,1); carSmokeEmitUntil = state.time + 1.0; healths.splice(i,1);} }
     state.distance+=moving*dt/10; if(moving>0){ for(const o of obstacles){ if(!o.passed && collide(o)){ o.passed=true; state.hits++; if(state.lives>0) state.lives--; try{ const a=document.getElementById('sfx_meow'); if(a){ a.currentTime=0; a.play().catch(()=>{}); } }catch(e){} if(state.lives<=0 && !state.gameOver){ const yHit=o.y, xHit=laneXAtY(o.lane,yHit); const tScale=clamp((yHit-horizonY)/(H-horizonY),0,1); const sScale=clamp(lerp(0.25,1.1,tScale),0.25,1.1); o.flying=true; o.fx=xHit; o.fy=yHit; o.fs=sScale; o.rot=0; o.vx=(Math.random()<0.5?-1:1)*(160+Math.random()*140); o.vy=-(140+Math.random()*180); o.rvel=(Math.random()*2-1)*6; o.gravity=300; spawnPoof(xHit,yHit,sScale); state.deathReason='life'; addHighScore(state.distance); state.gameOver=true; state.restartAt = state.time+4.0; state.stopUntil=0; } else { const yHit=o.y, xHit=laneXAtY(o.lane,yHit); const tScale=clamp((yHit-horizonY)/(H-horizonY),0,1); const sScale=clamp(lerp(0.25,1.1,tScale),0.25,1.1); o.flying=true; o.fx=xHit; o.fy=yHit; o.fs=sScale; o.rot=0; o.vx=(Math.random()<0.5?-1:1)*(140+Math.random()*120); o.vy=-(120+Math.random()*160); o.rvel=(Math.random()*2-1)*6; o.gravity=300; spawnPoof(xHit,yHit,sScale); state.stopUntil=state.time+2.0; } break; } } }
     pruneOffscreen(obstacles); pruneOffscreen(healths);
     if(state.gameOver && state.time>=state.restartAt) resetGame(); }
 
   // ---- draw
   function draw(){ if(bg){ ctx.save(); ctx.setTransform(1,0,0,1,0,0); ctx.drawImage(bg,0,0); ctx.restore(); drawTitleAndSmoke(SUN_Y,SUN_R); } else { const g=ctx.createLinearGradient(0,0,0,H); g.addColorStop(0,'#2a0036'); g.addColorStop(1,'#1b0033'); ctx.fillStyle=g; ctx.fillRect(0,0,W,H); drawTitleAndSmoke(SUN_Y,SUN_R); }
-    const moving=(state.gameOver||state.time<state.stopUntil)?0:currentSpeed()*SPEED_SCALE; const bob = moving ? Math.sin(state.time*2.2)*1.5 : 0; ctx.save(); ctx.translate(0, bob);
+    const moving=(state.gameOver||state.time<state.stopUntil)?0:state.normalSpeed*SPEED_SCALE; const bob = moving ? Math.sin(state.time*2.2)*1.5 : 0; ctx.save(); ctx.translate(0, bob);
     palms.forEach(p=>drawPalm(p.y,p.side)); obstacles.forEach(drawObstacle); healths.forEach(drawHealthItem); drawPlayer(); drawCarSmoke(); drawPoofs(); drawHealthTrail(); ctx.restore();
     drawCanvasHUD(); drawHighScoresHUD();
     if(state.paused){ ctx.save(); const msg='PAUSE'; ctx.textAlign='center'; ctx.textBaseline='middle'; let fs = fitSize(msg, Math.floor(H/3.2), W*0.9); ctx.font='900 '+fs+'px monospace'; drawLabel(msg, cx, H*0.5, { lw: Math.max(3, Math.floor(fs*0.06)), stroke:'#000', fill:'#ffffff', vhs:true }); ctx.restore(); return; }
