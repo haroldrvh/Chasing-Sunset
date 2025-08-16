@@ -186,8 +186,8 @@
     const padding=6, lineH=18, boxW=Math.floor(180*0.7), boxH=lineH*3+padding*2, x=W-boxW-8;
     let y=8; if(titleBox) y=Math.max(y, Math.round(titleBox.top+titleBox.height+12)); y=clamp(y,8,H-boxH-8);
     function heart(hx_,hy_,s,filled){ ctx.save(); if(filled){ ctx.shadowColor='#ff2e93'; ctx.shadowBlur=6; }
-      ctx.beginPath(); ctx.moveTo(hx_,hy_+s*0.6); ctx.bezierCurveTo(hx_-s*1.2,hy_+s*0.2,hx_-s*1.2,hy_-s*0.6,hx_,hy_-s*0.1); ctx.bezierCurveTo(hx_+s*1.2,hy_-s*0.6,hx_+s*1.2,hy_+s*0.2,hx_,hy_+s*0.6);
-      if(filled){ const gr=ctx.createLinearGradient(0,hy_-s,0,hy_+s); gr.addColorStop(0,'#ff9ac5'); gr.addColorStop(1,'#ff2e93'); ctx.fillStyle=gr; ctx.fill(); }
+      ctx.beginPath(); ctx.moveTo(hx_,hy_+s*0.6*1.2); ctx.bezierCurveTo(hx_-s*1.2,hy_+s*0.2*1.2,hx_-s*1.2,hy_-s*0.6*1.2,hx_,hy_-s*0.1*1.2); ctx.bezierCurveTo(hx_+s*1.2,hy_-s*0.6*1.2,hx_+s*1.2,hy_+s*0.2*1.2,hx_,hy_+s*0.6*1.2);
+      if(filled){ const gr=ctx.createLinearGradient(0,hy_-s*1.2,0,hy_+s*1.2); gr.addColorStop(0,'#ff9ac5'); gr.addColorStop(1,'#ff2e93'); ctx.fillStyle=gr; ctx.fill(); }
       ctx.shadowBlur=0; ctx.lineWidth=1.5; ctx.strokeStyle=filled?'#ff2e93':'#ff2e93aa'; ctx.stroke(); ctx.restore(); }
     panel(x,y,boxW,boxH,(px,py,pw,ph)=>{
       const tx=px+padding, ty=py+padding; ctx.fillStyle='#ffffff';
@@ -202,7 +202,10 @@
   }
   function drawHighScoresHUD(){
     ctx.save(); ctx.font='bold 14px monospace'; ctx.textAlign='left'; ctx.textBaseline='top';
-    const padding=6, lineH=18, boxW=Math.floor(180*0.7), boxH=lineH*4+padding*2, x=8;
+    const padding=6, lineH=18, x=8;
+    const headerW = ctx.measureText('High Scores').width;
+    const boxH = lineH*4 + padding*2;
+    const boxW = Math.ceil(headerW + padding*2 + 8);
     let y=8; if(titleBox) y=Math.max(y, Math.round(titleBox.top+titleBox.height+12)); y=clamp(y,8,H-boxH-8);
     panel(x,y,boxW,boxH,(px,py)=>{
       const tx=px+padding, ty=py+padding; ctx.fillStyle='#ffffff';
@@ -221,12 +224,18 @@
   const htrail=[];
   function spawnHealthTrailFrom(h){ const y=h.y, xc=laneXAtY(h.lane,y), t=clamp((y-horizonY)/(H-horizonY),0,1), s=clamp(lerp(0.25,1.1,t),0.25,1.1), mx=h.mirror?-1:1, half=24*1.2/2; htrail.push({x:xc+s*mx*half,y, vx:(Math.random()-0.5)*20,vy:-(20+Math.random()*30),r:2+Math.random()*2,life:0,max:0.5+Math.random()*0.3}); }
   function updateHealthTrail(dt){ for(let i=htrail.length-1;i>=0;i--){ const p=htrail[i]; p.life+=dt; p.x+=p.vx*dt; p.y+=p.vy*dt; p.vx*=0.98; p.vy*=0.98; if(p.life>p.max) htrail.splice(i,1); } }
-  function drawHealthTrail(){ if(!htrail.length) return; ctx.save(); ctx.globalCompositeOperation='lighter'; for(const p of htrail){ const t=p.life/p.max, a=(1-t)*0.35, rad=p.r*(1+t*1.2); const g=ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,rad); g.addColorStop(0,`rgba(255,0,34,${a})`); g.addColorStop(1,'rgba(255,0,34,0)'); ctx.fillStyle=g; ctx.beginPath(); ctx.arc(p.x,p.y,rad,0,Math.PI*2); ctx.fill(); } ctx.restore(); }
+  function drawHealthTrail(){ if(!htrail.length) return; ctx.save(); ctx.globalCompositeOperation='lighter'; for(const p of htrail){ const t=p.life/p.max, a=(1-t)*0.35, rad=p.r*(1+t*1.2); const g=ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,rad); g.addColorStop(0,`rgba(170,120,120,${a})`); g.addColorStop(1,'rgba(170,120,120,0)'); ctx.fillStyle=g; ctx.beginPath(); ctx.arc(p.x,p.y,rad,0,Math.PI*2); ctx.fill(); } ctx.restore(); }
+
+  // ---- car smoke plume (on health pickup)
+  const carSmoke=[]; let carSmokeEmitUntil=0; let carSmokeAcc=0;
+  function spawnCarSmoke(){ const x=player.x()-player.width*0.52; const y=playerY-player.height*0.12; carSmoke.push({x,y,vx:-(40+Math.random()*60),vy:-(10+Math.random()*30),r:2+Math.random()*2,life:0,max:1.0}); }
+  function updateCarSmoke(dt){ if(state.time < carSmokeEmitUntil){ carSmokeAcc += dt*40; while(carSmokeAcc>=1){ spawnCarSmoke(); carSmokeAcc-=1; } } for(let i=carSmoke.length-1;i>=0;i--){ const p=carSmoke[i]; p.life+=dt; p.x+=p.vx*dt; p.y+=p.vy*dt; p.vx*=0.98; p.vy-=20*dt; p.r+=14*dt; if(p.life>p.max) carSmoke.splice(i,1);} }
+  function drawCarSmoke(){ if(!carSmoke.length) return; ctx.save(); ctx.globalCompositeOperation='lighter'; for(const p of carSmoke){ const t=p.life/p.max, a=(1-t)*0.4, r=Math.max(1,p.r); const g=ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,r); g.addColorStop(0,`rgba(220,220,220,${a})`); g.addColorStop(1,'rgba(220,220,220,0)'); ctx.fillStyle=g; ctx.beginPath(); ctx.arc(p.x,p.y,r,0,Math.PI*2); ctx.fill(); } ctx.restore(); }
 
   // ---- update
-  function update(dt){ state.time+=dt; if(state.time<state.stopUntil){ if(nextSpawn<state.stopUntil) nextSpawn=state.stopUntil; if(nextHeal<state.stopUntil) nextHeal=state.stopUntil; } updateSmoke(dt); updatePoofs(dt); updateHealthTrail(dt);
+  function update(dt){ state.time+=dt; if(state.time<state.stopUntil){ if(nextSpawn<state.stopUntil) nextSpawn=state.stopUntil; if(nextHeal<state.stopUntil) nextHeal=state.stopUntil; } updateSmoke(dt); updatePoofs(dt); updateHealthTrail(dt); updateCarSmoke(dt);
     state.health=clamp((state.health??1)-dt/10,0,1); if(state.health<=0 && !state.gameOver){ state.deathReason='health'; addHighScore(state.distance); state.gameOver=true; state.restartAt = state.time+4.0; state.stopUntil=0; }
-    if(!state.gameOver && state.time>=nextHeal) spawnHealth(); if(!state.gameOver && state.time>=nextSpawn) spawnObstacle(); const moving=(state.gameOver||state.time<state.stopUntil)?0:state.normalSpeed*SPEED_SCALE; palms.forEach(p=>{ p.y+=moving*dt*0.8; if(p.y>H+64) p.y=-Math.random()*H; }); obstacles.forEach(o=>{ if(o.flying){ o.vy=(o.vy??0)+(o.gravity??220)*dt; o.fx+=(o.vx??0)*dt; o.fy+=(o.vy??0)*dt; if(o.rvel) o.rot=(o.rot||0)+o.rvel*dt; if(o.fs) o.fs*=0.995; } else { o.y = forwardStep(o.y, dt, moving); } }); healths.forEach(h=>{ h.y = forwardStep(h.y, dt, moving); h.smokeAcc=(h.smokeAcc||0)+dt*18; while(h.smokeAcc>=1){ spawnHealthTrailFrom(h); h.smokeAcc-=1; } }); for(let i=healths.length-1;i>=0;i--){ const h=healths[i]; if(collide(h)){ state.health=clamp(state.health+HEALTH_REPLENISH,0,1); healths.splice(i,1);} }
+    if(!state.gameOver && state.time>=nextHeal) spawnHealth(); if(!state.gameOver && state.time>=nextSpawn) spawnObstacle(); const moving=(state.gameOver||state.time<state.stopUntil)?0:state.normalSpeed*SPEED_SCALE; palms.forEach(p=>{ p.y+=moving*dt*0.8; if(p.y>H+64) p.y=-Math.random()*H; }); obstacles.forEach(o=>{ if(o.flying){ o.vy=(o.vy??0)+(o.gravity??220)*dt; o.fx+=(o.vx??0)*dt; o.fy+=(o.vy??0)*dt; if(o.rvel) o.rot=(o.rot||0)+o.rvel*dt; if(o.fs) o.fs*=0.995; } else { o.y = forwardStep(o.y, dt, moving); } }); healths.forEach(h=>{ h.y = forwardStep(h.y, dt, moving); h.smokeAcc=(h.smokeAcc||0)+dt*18; while(h.smokeAcc>=1){ spawnHealthTrailFrom(h); h.smokeAcc-=1; } }); for(let i=healths.length-1;i>=0;i--){ const h=healths[i]; if(collide(h)){ state.health=clamp(state.health+HEALTH_REPLENISH,0,1); carSmokeEmitUntil = state.time + 1.0; healths.splice(i,1);} }
     state.distance+=moving*dt/10; if(moving>0){ for(const o of obstacles){ if(!o.passed && collide(o)){ o.passed=true; state.hits++; if(state.lives>0) state.lives--; try{ const a=document.getElementById('sfx_meow'); if(a){ a.currentTime=0; a.play().catch(()=>{}); } }catch(e){} if(state.lives<=0 && !state.gameOver){ const yHit=o.y, xHit=laneXAtY(o.lane,yHit); const tScale=clamp((yHit-horizonY)/(H-horizonY),0,1); const sScale=clamp(lerp(0.25,1.1,tScale),0.25,1.1); o.flying=true; o.fx=xHit; o.fy=yHit; o.fs=sScale; o.rot=0; o.vx=(Math.random()<0.5?-1:1)*(160+Math.random()*140); o.vy=-(140+Math.random()*180); o.rvel=(Math.random()*2-1)*6; o.gravity=300; spawnPoof(xHit,yHit,sScale); state.deathReason='life'; addHighScore(state.distance); state.gameOver=true; state.restartAt = state.time+4.0; state.stopUntil=0; } else { const yHit=o.y, xHit=laneXAtY(o.lane,yHit); const tScale=clamp((yHit-horizonY)/(H-horizonY),0,1); const sScale=clamp(lerp(0.25,1.1,tScale),0.25,1.1); o.flying=true; o.fx=xHit; o.fy=yHit; o.fs=sScale; o.rot=0; o.vx=(Math.random()<0.5?-1:1)*(140+Math.random()*120); o.vy=-(120+Math.random()*160); o.rvel=(Math.random()*2-1)*6; o.gravity=300; spawnPoof(xHit,yHit,sScale); state.stopUntil=state.time+2.0; } break; } } }
     pruneOffscreen(obstacles); pruneOffscreen(healths);
     if(state.gameOver && state.time>=state.restartAt) resetGame(); }
@@ -234,7 +243,7 @@
   // ---- draw
   function draw(){ if(bg){ ctx.save(); ctx.setTransform(1,0,0,1,0,0); ctx.drawImage(bg,0,0); ctx.restore(); drawTitleAndSmoke(SUN_Y,SUN_R); } else { const g=ctx.createLinearGradient(0,0,0,H); g.addColorStop(0,'#2a0036'); g.addColorStop(1,'#1b0033'); ctx.fillStyle=g; ctx.fillRect(0,0,W,H); drawTitleAndSmoke(SUN_Y,SUN_R); }
     const moving=(state.gameOver||state.time<state.stopUntil)?0:state.normalSpeed*SPEED_SCALE; const bob = moving ? Math.sin(state.time*2.2)*1.5 : 0; ctx.save(); ctx.translate(0, bob);
-    palms.forEach(p=>drawPalm(p.y,p.side)); obstacles.forEach(drawObstacle); healths.forEach(drawHealthItem); drawPlayer(); drawPoofs(); drawHealthTrail(); ctx.restore();
+    palms.forEach(p=>drawPalm(p.y,p.side)); obstacles.forEach(drawObstacle); healths.forEach(drawHealthItem); drawPlayer(); drawCarSmoke(); drawPoofs(); drawHealthTrail(); ctx.restore();
     drawCanvasHUD(); drawHighScoresHUD();
     if(state.paused){ ctx.save(); const msg='PAUSE'; ctx.textAlign='center'; ctx.textBaseline='middle'; let fs = fitSize(msg, Math.floor(H/3.2), W*0.9); ctx.font='900 '+fs+'px monospace'; drawLabel(msg, cx, H*0.5, { lw: Math.max(3, Math.floor(fs*0.06)), stroke:'#000', fill:'#ffffff', vhs:true }); ctx.restore(); return; }
     if(state.gameOver){ ctx.save(); const msg='GAME OVER'; ctx.textAlign='center'; ctx.textBaseline='middle'; let fs = fitSize(msg, Math.floor(H/3), W*0.92); ctx.font='900 '+fs+'px monospace'; const blink=(Math.sin(state.time*5)>0)?1.0:0.75; ctx.globalAlpha=blink; const grad=ctx.createLinearGradient(0,(H/2)-fs*0.6,0,(H/2)+fs*0.6); grad.addColorStop(0,'#ffd1d6'); grad.addColorStop(0.35,'#ff3350'); grad.addColorStop(1,'#a40014'); drawLabel(msg, cx, H*0.5, { fill:grad, stroke:'#51000c', lw: Math.max(3, Math.floor(fs*0.065)), shadow:{color:'#ff0022', blur:Math.max(12,Math.floor(fs*0.2))} }); ctx.globalAlpha=1; const sub=(state.deathReason==='health')?'You became sober':'You killed too many Shmmees'; const fs2=Math.max(12,Math.floor(fs*0.18)); ctx.font='bold '+fs2+'px monospace'; drawLabel(sub, cx, H*0.5 + fs*0.75, { fill:'#ffffff', stroke:'#000', lw: Math.max(2, Math.floor(fs*0.035)) }); ctx.restore(); }
